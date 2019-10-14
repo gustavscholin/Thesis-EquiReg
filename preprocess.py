@@ -3,6 +3,8 @@ import numpy as np
 import SimpleITK as sitk
 import os
 import ants
+import tensorflow as tf
+import itertools
 
 from absl import flags, app, logging
 from functools import partial
@@ -36,6 +38,51 @@ def sup_unsup_split(unsup_ratio):
     pass
 
 
+def _float_feature(value):
+  return tf.train.Feature(float_list=tf.train.FloatList(value=list(value)))
+
+
+def obtain_tfrecord_writer(out_path, shard_cnt):
+  tfrecord_writer = tf.io.TFRecordWriter(
+      "{}.{:d}".format(out_path, shard_cnt))
+  return tfrecord_writer
+
+
+def save_tfrecord(example_list, out_path, max_shard_size=4096):
+  shard_cnt = 0
+  shard_size = 0
+  record_writer = obtain_tfrecord_writer(out_path, shard_cnt)
+  for example in example_list:
+    if shard_size >= max_shard_size:
+      record_writer.close()
+      shard_cnt += 1
+      record_writer = obtain_tfrecord_writer(out_path, shard_cnt)
+      shard_size = 0
+    shard_size += 1
+    record_writer.write(example.SerializeToString())
+  record_writer.close()
+  logging.info("Saved {} examples to {}".format(len(example_list), out_path))
+
+
+def get_example(images, segs=None):
+    example_list = []
+    if segs is not None:
+        for image, seg in zip(images, segs):
+            feature = {
+                'image': _float_feature(image.reshape(-1)),
+                'seg': _float_feature(seg.reshape(-1))
+            }
+            example_list.append(tf.train.Example(features=tf.train.Features(feature=feature)))
+    else:
+        for image in images:
+            feature = {
+                'image': _float_feature(image.reshape(-1))
+            }
+            example_list.append(tf.train.Example(features=tf.train.Features(feature=feature)))
+
+    return example_list
+
+
 def process_data(in_path, out_path, labeled, split, package='sitk', nbr_cores=1):
     logging.info('Pre-processing {} data'.format(split))
     data_paths = get_data_paths(in_path)
@@ -53,13 +100,18 @@ def process_data(in_path, out_path, labeled, split, package='sitk', nbr_cores=1)
         pool = Pool(processes=nbr_cores)
         data_list = pool.map(partial_preproc_one, data_paths)
 
-    if labeled:
-        images = np.concatenate([data[0] for data in data_list], axis=0)
-        segs = np.concatenate([data[1] for data in data_list], axis=0)
-        save_proc_data(out_path, split, images, segs)
-    else:
-        images = np.concatenate([data[0] for data in data_list], axis=0)
-        save_proc_data(out_path, split, images)
+    data_list = list(itertools.chain.from_iterable(data_list))
+
+    # if labeled:
+    #     images = np.concatenate([data[0] for data in data_list], axis=0)
+    #     segs = np.concatenate([data[1] for data in data_list], axis=0)
+    #     save_proc_data(out_path, split, images, segs)
+    # else:
+    #     images = np.concatenate(data_list, axis=0)
+    #     save_proc_data(out_path, split, images)
+
+    file_name = os.path.join(out_path, "{}_data.tfrecord".format(split))
+    save_tfrecord(data_list, file_name)
 
 
 def get_data_paths(path):
@@ -124,9 +176,10 @@ def preproc_one_sitk(path, labeled):
     mri_channels = []
     for file in sorted(os.listdir(path)):
         if 'seg' not in file:
-            mri_channels.append(sitk.ReadImage(os.path.join(path, file)))
+            mri_channels.append(sitk.ReadImage(os.path.join(path, file), sitk.sitkFloat32))
         else:
-            segs = np.expand_dims(sitk.GetArrayFromImage(sitk.ReadImage(os.path.join(path, file))), axis=-1)
+            segs = np.expand_dims(sitk.GetArrayFromImage(sitk.ReadImage(os.path.join(path, file),
+                                                                        sitk.sitkFloat32)), axis=-1)
 
     if labeled:
         mri_channels, segs = crop_sitk(mri_channels, segs)
@@ -134,17 +187,22 @@ def preproc_one_sitk(path, labeled):
         mri_channels = crop_sitk(mri_channels)
 
     for channel in range(4):
-        mri_channels[channel] = bias_field_correction_sitk(mri_channels[channel])
+        # mri_channels[channel] = bias_field_correction_sitk(mri_channels[channel])
+        pass
 
     images = sitk.GetArrayFromImage(sitk.Compose(mri_channels))
 
     for channel in range(4):
         images[:, :, :, channel] = histogram_equalization(images[:, :, :, channel])
 
+    # if labeled:
+    #     return images, segs
+    # else:
+    #     return images
     if labeled:
-        return images, segs
+        return get_example(images, segs)
     else:
-        return images
+        return get_example(images)
 
 
 def crop_sitk(mri_channels, segs=None):
@@ -190,11 +248,9 @@ def histogram_equalization(data):
 
 def save_proc_data(save_path, split, images, segs=None):
     logging.info('Saving {} data'.format(split))
-    if not os.path.exists(save_path):
-        os.makedirs(save_path)
-    np.save(os.path.join(save_path, "{}_images.npy".format(split)), images)
+    np.savez_compressed(os.path.join(save_path, "{}_images.npz".format(split)), images)
     if segs is not None:
-        np.save(os.path.join(save_path, "{}_seg_maps.npy".format(split)), segs)
+        np.savez_compressed(os.path.join(save_path, "{}_seg_maps.npz".format(split)), segs)
 
 
 def main(argsv):
@@ -203,8 +259,11 @@ def main(argsv):
         logging.fatal('Input data not found')
         sys.exit()
 
-    if not os.path.exists(FLAGS.out_path) or not all(file in file_list for file in os.listdir(FLAGS.out_path)):
+    if not os.path.exists(FLAGS.out_path) or not all(file in file_list for file in os.listdir(FLAGS.out_path)): #TODO: fix this
         logging.info('Starting pre-processing')
+
+        if not os.path.exists(FLAGS.out_path):
+            os.makedirs(FLAGS.out_path)
 
         train_path = os.path.join(FLAGS.in_path, DOWNLOADED_TRAIN_FOLDER)
         val_path = os.path.join(FLAGS.in_path, DOWNLOADED_VAL_FOLDER)
