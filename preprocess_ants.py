@@ -2,6 +2,7 @@ import sys
 import numpy as np
 import SimpleITK as sitk
 import os
+# import ants
 import tensorflow as tf
 import itertools
 
@@ -109,10 +110,9 @@ def preproc_one(path, labeled):
     mri_channels = []
     for file in sorted(os.listdir(path)):
         if 'seg' not in file:
-            mri_channels.append(sitk.ReadImage(os.path.join(path, file), sitk.sitkFloat32))
+            mri_channels.append(ants.image_read(os.path.join(path, file)))
         else:
-            segs = np.expand_dims(sitk.GetArrayFromImage(sitk.ReadImage(os.path.join(path, file),
-                                                                        sitk.sitkFloat32)), axis=-1)
+            segs = np.expand_dims(ants.image_read(os.path.join(path, file)).numpy().transpose(2, 1, 0), axis=-1)
 
     if labeled:
         mri_channels, segs = crop(mri_channels, segs)
@@ -120,10 +120,10 @@ def preproc_one(path, labeled):
         mri_channels = crop(mri_channels)
 
     for channel in range(4):
-        # mri_channels[channel] = bias_field_correction_sitk(mri_channels[channel])
-        pass
+        mask = ants.get_mask(mri_channels[channel], low_thresh=1, cleanup=0)
+        mri_channels[channel] = ants.n4_bias_field_correction(mri_channels[channel], mask)
 
-    images = sitk.GetArrayFromImage(sitk.Compose(mri_channels))
+    images = ants.merge_channels(mri_channels).numpy().transpose(2, 1, 0, 3)
 
     for channel in range(4):
         images[:, :, :, channel] = histogram_equalization(images[:, :, :, channel])
@@ -138,25 +138,20 @@ def crop(mri_channels, segs=None):
     min_idx = 155
     max_idx = 0
     for mri_channel in mri_channels:
-        mask = mri_channel != 0
-        label_shape_filter = sitk.LabelShapeStatisticsImageFilter()
-        label_shape_filter.Execute(mask)
-        bounding_box = label_shape_filter.GetBoundingBox(1)
+        non_zero_idx = mri_channel.nonzero()
+        if min(non_zero_idx[2]) < min_idx:
+            min_idx = min(non_zero_idx[2])
+        if max(non_zero_idx[2]) + 1 > max_idx:
+            max_idx = max(non_zero_idx[2]) + 1
 
-        if bounding_box[2] < min_idx:
-            min_idx = bounding_box[2]
-        if bounding_box[5] + bounding_box[2] > max_idx:
-            max_idx = bounding_box[5] + bounding_box[2]
+    crop_mask = np.zeros((240, 240, 155))
+    crop_mask[:, :, min_idx:max_idx] = 1
+    crop_mask = ants.from_numpy(crop_mask)
 
     if segs is not None:
-        return [mri_channel[:, :, min_idx:max_idx] for mri_channel in mri_channels], segs[min_idx:max_idx, :, :]
+        return [ants.crop_image(mri_channel, crop_mask) for mri_channel in mri_channels], segs[min_idx:max_idx, :, :]
     else:
-        return [mri_channel[:, :, min_idx:max_idx] for mri_channel in mri_channels]
-
-def bias_field_correction(img):
-    mask = (img != 0)
-    img = sitk.Cast(img, sitk.sitkFloat32)
-    return sitk.N4BiasFieldCorrection(img, mask)
+        return [ants.crop_image(mri_channel, crop_mask) for mri_channel in mri_channels]
 
 
 def histogram_equalization(data):
