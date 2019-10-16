@@ -55,14 +55,11 @@ def save_tfrecord(example_list, out_path, shard_cnt):
 
 
 def save_npy(data_list, out_dir, shard_cnt):
-    if len(data_list) > 1:
+    if data_list:
         data = np.concatenate(data_list, axis=0)
-    else:
-        data = data_list[0]
-
-    out_path = '{}_{}.npy'.format(out_dir, shard_cnt)
-    np.save(out_path, data)
-    logging.info('Saved {} samples to {}'.format(data.shape[0], out_path))
+        out_path = '{}_{}.npy'.format(out_dir, shard_cnt)
+        np.save(out_path, data)
+        logging.info('Saved {} samples to {}'.format(data.shape[0], out_path))
 
 
 def get_example(images, segs=None):
@@ -115,7 +112,7 @@ def process_data(in_path, out_path, labeled, split, out_format, nbr_cores=1):
 
         for sample_tup in pool.imap(partial_preproc_one, data_paths):
             data_list.append(sample_tup)
-            if len(data_list) == 5:
+            if len(data_list) == 3:
                 save_npy([data[0] for data in data_list], images_file_path, shard_cnt)
                 if labeled:
                     save_npy([data[1] for data in data_list], segs_file_path, shard_cnt)
