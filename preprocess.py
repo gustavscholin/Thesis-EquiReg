@@ -54,6 +54,19 @@ def save_tfrecord(example_list, out_path, shard_cnt):
     logging.info("Saved {} examples to {}".format(len(example_list), out_path))
 
 
+def save_npy(data_list, out_path, split, labeled, shard_cnt):
+    images_file_path = os.path.join(out_path, '{}_images_{}.npy'.format(split, shard_cnt))
+    images = np.concatenate([data[0] for data in data_list], axis=0)
+    np.save(images_file_path, images)
+    logging.info('Saved {} samples to {}'.format(images.shape[0], images_file_path))
+
+    if labeled:
+        segs_file_path = os.path.join(out_path, '{}_seg_maps_{}.npy'.format(split, shard_cnt))
+        segs = np.concatenate([data[1] for data in data_list], axis=0)
+        np.save(segs_file_path, segs)
+        logging.info('Saved {} samples to {}'.format(segs.shape[0], segs_file_path))
+
+
 def get_example(images, segs=None):
     example_list = []
     if segs is not None:
@@ -73,27 +86,41 @@ def get_example(images, segs=None):
     return example_list
 
 
-def process_data(in_path, out_path, labeled, split, nbr_cores=1):
+def process_data(in_path, out_path, labeled, split, out_format, nbr_cores=1):
     logging.info('Pre-processing {} data'.format(split))
     data_paths = get_data_paths(in_path)
 
-    partial_preproc_one = partial(preproc_one, labeled=labeled)
+    partial_preproc_one = partial(preproc_one, out_format=out_format)
 
     pool = Pool(processes=nbr_cores)
     shard_cnt = 0
-    example_lists = []
-    file_name = os.path.join(out_path, "{}_data.tfrecord".format(split))
 
-    for example_list in pool.imap(partial_preproc_one, data_paths):
-        example_lists.append(example_list)
-        if len(example_lists) == 5:
-            examples = list(itertools.chain.from_iterable(example_lists))
-            save_tfrecord(examples, file_name, shard_cnt)
-            shard_cnt += 1
-            example_lists = []
+    if out_format == 'tfrecord':
+        example_lists = []
+        file_name = os.path.join(out_path, "{}_data.tfrecord".format(split))
 
-    examples = list(itertools.chain.from_iterable(example_lists))
-    save_tfrecord(examples, file_name, shard_cnt)
+        for example_list in pool.imap(partial_preproc_one, data_paths):
+            example_lists.append(example_list)
+            if len(example_lists) == 5:
+                examples = list(itertools.chain.from_iterable(example_lists))
+                save_tfrecord(examples, file_name, shard_cnt)
+                shard_cnt += 1
+                example_lists = []
+
+        examples = list(itertools.chain.from_iterable(example_lists))
+        save_tfrecord(examples, file_name, shard_cnt)
+
+    elif out_format == 'numpy':
+        data_list = []
+
+        for sample_tup in pool.imap(partial_preproc_one, data_paths):
+            data_list.append(sample_tup)
+            if len(data_list) == 5:
+                save_npy(data_list, out_path, split, labeled, shard_cnt)
+                shard_cnt += 1
+                data_list = []
+
+        save_npy(data_list, out_path, split, labeled, shard_cnt)
 
 
 def get_data_paths(path):
@@ -104,9 +131,10 @@ def get_data_paths(path):
     return sorted(data_paths)
 
 
-def preproc_one(path, labeled):
+def preproc_one(path, out_format):
     logging.info('Processing {}'.format(path))
     mri_channels = []
+    segs = None
     for file in sorted(os.listdir(path)):
         if 'seg' not in file:
             mri_channels.append(sitk.ReadImage(os.path.join(path, file), sitk.sitkFloat32))
@@ -114,10 +142,7 @@ def preproc_one(path, labeled):
             segs = np.expand_dims(sitk.GetArrayFromImage(sitk.ReadImage(os.path.join(path, file),
                                                                         sitk.sitkFloat32)), axis=-1)
 
-    if labeled:
-        mri_channels, segs = crop(mri_channels, segs)
-    else:
-        mri_channels = crop(mri_channels)
+    mri_channels, segs = crop(mri_channels, segs)
 
     for channel in range(4):
         # mri_channels[channel] = bias_field_correction_sitk(mri_channels[channel])
@@ -128,10 +153,11 @@ def preproc_one(path, labeled):
     for channel in range(4):
         images[:, :, :, channel] = histogram_equalization(images[:, :, :, channel])
 
-    if labeled:
+    if out_format == 'tfrecord':
         return get_example(images, segs)
-    else:
-        return get_example(images)
+
+    elif out_format == 'numpy':
+        return images, segs
 
 
 def crop(mri_channels, segs=None):
@@ -152,6 +178,7 @@ def crop(mri_channels, segs=None):
         return [mri_channel[:, :, min_idx:max_idx] for mri_channel in mri_channels], segs[min_idx:max_idx, :, :]
     else:
         return [mri_channel[:, :, min_idx:max_idx] for mri_channel in mri_channels]
+
 
 def bias_field_correction(img):
     mask = (img != 0)
@@ -175,13 +202,6 @@ def histogram_equalization(data):
     return data
 
 
-def save_proc_data(save_path, split, images, segs=None):
-    logging.info('Saving {} data'.format(split))
-    np.savez_compressed(os.path.join(save_path, "{}_images.npz".format(split)), images)
-    if segs is not None:
-        np.savez_compressed(os.path.join(save_path, "{}_seg_maps.npz".format(split)), segs)
-
-
 def main(argsv):
     if not (os.path.exists(os.path.join(FLAGS.in_path, DOWNLOADED_TRAIN_FOLDER))
             or os.path.exists(os.path.join(FLAGS.in_path, DOWNLOADED_TRAIN_FOLDER))):
@@ -198,9 +218,9 @@ def main(argsv):
         val_path = os.path.join(FLAGS.in_path, DOWNLOADED_VAL_FOLDER)
 
         process_data(train_path, FLAGS.out_path, labeled=True, split="train",
-                     nbr_cores=FLAGS.nbr_cores)
+                     out_format=FLAGS.out_format, nbr_cores=FLAGS.nbr_cores)
         process_data(val_path, FLAGS.out_path, labeled=False, split="val",
-                     nbr_cores=FLAGS.nbr_cores)
+                     out_format=FLAGS.out_format, nbr_cores=FLAGS.nbr_cores)
 
         logging.info('Pre-processing finished')
 
@@ -213,6 +233,11 @@ if __name__ == '__main__':
     flags.DEFINE_string(
         'out_path', default=PROCESSED_PATH,
         help='Path where the processed data is saved.'
+    )
+    flags.DEFINE_enum(
+        'out_format', default='numpy',
+        enum_values=['numpy', 'tfrecord'],
+        help='Choose the output format to be either .tfrecords- or .npy-files.'
     )
     flags.DEFINE_integer(
         'nbr_cores', default=1,
