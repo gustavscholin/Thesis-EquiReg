@@ -54,17 +54,15 @@ def save_tfrecord(example_list, out_path, shard_cnt):
     logging.info("Saved {} examples to {}".format(len(example_list), out_path))
 
 
-def save_npy(data_list, out_path, split, labeled, shard_cnt):
-    images_file_path = os.path.join(out_path, '{}_images_{}.npy'.format(split, shard_cnt))
-    images = np.concatenate([data[0] for data in data_list], axis=0)
-    np.save(images_file_path, images)
-    logging.info('Saved {} samples to {}'.format(images.shape[0], images_file_path))
+def save_npy(data_list, out_dir, shard_cnt):
+    if len(data_list) > 1:
+        data = np.concatenate(data_list, axis=0)
+    else:
+        data = data_list[0]
 
-    if labeled:
-        segs_file_path = os.path.join(out_path, '{}_seg_maps_{}.npy'.format(split, shard_cnt))
-        segs = np.concatenate([data[1] for data in data_list], axis=0)
-        np.save(segs_file_path, segs)
-        logging.info('Saved {} samples to {}'.format(segs.shape[0], segs_file_path))
+    out_path = '{}_{}.npy'.format(out_dir, shard_cnt)
+    np.save(out_path, data)
+    logging.info('Saved {} samples to {}'.format(data.shape[0], out_path))
 
 
 def get_example(images, segs=None):
@@ -112,15 +110,21 @@ def process_data(in_path, out_path, labeled, split, out_format, nbr_cores=1):
 
     elif out_format == 'numpy':
         data_list = []
+        images_file_path = os.path.join(out_path, '{}_images'.format(split))
+        segs_file_path = os.path.join(out_path, '{}_seg_maps'.format(split))
 
         for sample_tup in pool.imap(partial_preproc_one, data_paths):
             data_list.append(sample_tup)
             if len(data_list) == 5:
-                save_npy(data_list, out_path, split, labeled, shard_cnt)
+                save_npy([data[0] for data in data_list], images_file_path, shard_cnt)
+                if labeled:
+                    save_npy([data[1] for data in data_list], segs_file_path, shard_cnt)
                 shard_cnt += 1
                 data_list = []
 
-        save_npy(data_list, out_path, split, labeled, shard_cnt)
+        save_npy([data[0] for data in data_list], images_file_path, shard_cnt)
+        if labeled:
+            save_npy([data[1] for data in data_list], segs_file_path, shard_cnt)
 
 
 def get_data_paths(path):
@@ -177,7 +181,7 @@ def crop(mri_channels, segs=None):
     if segs is not None:
         return [mri_channel[:, :, min_idx:max_idx] for mri_channel in mri_channels], segs[min_idx:max_idx, :, :]
     else:
-        return [mri_channel[:, :, min_idx:max_idx] for mri_channel in mri_channels]
+        return [mri_channel[:, :, min_idx:max_idx] for mri_channel in mri_channels], segs
 
 
 def bias_field_correction(img):
