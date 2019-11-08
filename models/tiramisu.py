@@ -55,8 +55,6 @@ from tensorflow.keras.regularizers import l2
 from tensorflow.keras.utils import get_source_inputs
 import tensorflow.keras.backend as K
 
-from keras_contrib.layers import SubPixelUpscaling
-
 
 def DenseNetFCN(input_shape, nb_dense_block=5, growth_rate=16, nb_layers_per_block=(4, 5, 7, 10, 12, 15),
                 reduction=0.0, dropout_rate=0.2, weight_decay=1E-4,
@@ -100,10 +98,8 @@ def DenseNetFCN(input_shape, nb_dense_block=5, growth_rate=16, nb_layers_per_blo
                 if no `weights` argument is specified.
             activation: Type of activation at the top layer. Can be one of 'softmax'
                 or 'sigmoid'. Note that if sigmoid is used, classes must be 1.
-            upsampling_conv: number of convolutional layers in upsampling via subpixel
-                convolution
-            upsampling_type: Can be one of 'deconv', 'upsampling' and
-                'subpixel'. Defines type of upsampling algorithm used.
+            upsampling_type: Can be one of 'deconv' and 'upsampling'
+                Defines type of upsampling algorithm used.
             batchsize: Fixed batch size. This is a temporary requirement for
                 computation of output shape in the case of Deconvolution2D layers.
                 Parameter will be removed in next iteration of Keras, which infers
@@ -123,9 +119,9 @@ def DenseNetFCN(input_shape, nb_dense_block=5, growth_rate=16, nb_layers_per_blo
 
     upsampling_type = upsampling_type.lower()
 
-    if upsampling_type not in ['upsampling', 'deconv', 'subpixel']:
-        raise ValueError('Parameter "upsampling_type" must be one of "upsampling", '
-                         '"deconv" or "subpixel".')
+    if upsampling_type not in ['upsampling', 'deconv']:
+        raise ValueError('Parameter "upsampling_type" must be one of "upsampling" or '
+                         '"deconv".')
 
     if input_shape is None:
         raise ValueError('For fully convolutional models, '
@@ -348,7 +344,7 @@ def __transition_up_block(ip, nb_filters, type='deconv', weight_decay=1E-4,
         ip: input keras tensor
         nb_filters: integer, the dimensionality of the output space
             (i.e. the number output of filters in the convolution)
-        type: can be 'upsampling', 'subpixel', 'deconv'. Determines
+        type: can be 'upsampling', 'deconv'. Determines
             type of upsampling performed
         weight_decay: weight decay factor
         block_prefix: str, for block unique naming
@@ -369,17 +365,6 @@ def __transition_up_block(ip, nb_filters, type='deconv', weight_decay=1E-4,
 
         if type == 'upsampling':
             x = UpSampling2D(name=name_or_none(block_prefix, '_upsampling'))(ip)
-        elif type == 'subpixel':
-            x = Conv2D(nb_filters, (3, 3), activation='relu', padding='same',
-                       kernel_regularizer=l2(weight_decay), use_bias=False,
-                       kernel_initializer='he_normal',
-                       name=name_or_none(block_prefix, '_conv2D'))(ip)
-            x = SubPixelUpscaling(scale_factor=2,
-                                  name=name_or_none(block_prefix, '_subpixel'))(x)
-            x = Conv2D(nb_filters, (3, 3), activation='relu', padding='same',
-                       kernel_regularizer=l2(weight_decay), use_bias=False,
-                       kernel_initializer='he_normal',
-                       name=name_or_none(block_prefix, '_conv2D'))(x)
         else:
             x = Conv2DTranspose(nb_filters, (3, 3), activation='relu', padding='same',
                                 strides=(2, 2), kernel_initializer='he_normal',
@@ -410,9 +395,7 @@ def __create_fcn_dense_net(nb_classes, img_input, nb_dense_block=5,
             If positive integer, a set number of layers per dense block.
             If list, nb_layer is used as provided. Note that list size must
             be (nb_dense_block + 1)
-        nb_upsampling_conv: number of convolutional layers in upsampling via subpixel
-            convolution
-        upsampling_type: Can be one of 'upsampling', 'deconv' and 'subpixel'. Defines
+        upsampling_type: Can be one of 'upsampling' and 'deconv'. Defines
             type of upsampling algorithm used.
         input_shape: Only used for shape inference in fully convolutional networks.
         activation: Type of activation at the top layer. Can be one of 'softmax' or
@@ -428,7 +411,7 @@ def __create_fcn_dense_net(nb_classes, img_input, nb_dense_block=5,
         a keras tensor
     # Raises
         ValueError: in case of invalid argument for `reduction`,
-            `nb_dense_block` or `nb_upsampling_conv`.
+            `nb_dense_block`.
     '''
     with K.name_scope('DenseNetFCN'):
         concat_axis = 1 if K.image_data_format() == 'channels_first' else -1
