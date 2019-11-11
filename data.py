@@ -91,13 +91,14 @@ def get_dataset(type, data_dir, record_spec,
     dataset = dataset.map(parser, num_parallel_calls=32)
 
     if is_training:
+        buffer_size = int(size * 0.1)
         if cut_size < size:
-            dataset = dataset.shuffle(size, seed)
+            dataset = dataset.shuffle(buffer_size, seed)
             if type == 'sup':
                 dataset = dataset.take(cut_size)
             else:
                 dataset = dataset.skip(size - cut_size)
-        dataset = dataset.shuffle(cut_size)
+        dataset = dataset.shuffle(buffer_size)
     dataset = dataset.repeat()
     dataset = dataset.batch(per_core_bsz, drop_remainder=True)
     dataset = dataset.prefetch(1)
