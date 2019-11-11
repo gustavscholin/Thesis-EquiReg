@@ -12,35 +12,23 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""UDA on CIFAR-10 and SVHN.
-"""
 
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import contextlib
 import os
-import time
 import json
-
 import numpy as np
-
-from absl import flags
-import absl.logging as _logging  # pylint: disable=unused-import
-
 import tensorflow as tf
-
-# from autoaugment import custom_ops as ops
 import data
 import utils
 
-# from autoaugment.wrn import build_wrn_model
-# from autoaugment.shake_drop import build_shake_drop_model
-# from autoaugment.shake_shake import build_shake_shake_model
-
+from absl import flags
 from models.tiramisu import DenseNetFCN
 from augmenters import unsup_logits_aug
+
+os.environ['KMP_AFFINITY'] = 'disabled'
 
 # TPU related
 flags.DEFINE_string(
