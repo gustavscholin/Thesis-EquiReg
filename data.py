@@ -61,13 +61,14 @@ def get_dataset(type, data_dir, record_spec,
         if type == 'sup':
             example['image'] = tf.reshape(example['image'], [224, 224, 4])
             example['seg_mask'] = tf.reshape(example['seg_mask'], [224, 224])
-            image, seg_mask = tf.py_func(sup_aug, [example['image'], example['seg_mask']], (tf.float32, tf.int32))
-            image.set_shape([224, 224, 4])
-            seg_mask.set_shape([224, 224])
-            example = {
-                'image': image,
-                'seg_mask': seg_mask
-            }
+            if is_training:
+                image, seg_mask = tf.py_func(sup_aug, [example['image'], example['seg_mask']], (tf.float32, tf.int32))
+                image.set_shape([224, 224, 4])
+                seg_mask.set_shape([224, 224])
+                example = {
+                    'image': image,
+                    'seg_mask': seg_mask
+                }
         elif type == 'unsup':
             ori_image = tf.reshape(example['image'], [224, 224, 4])
             aug_image, seed_sq_ent = tf.py_func(unsup_img_aug, [ori_image], (tf.float32, tf.string))

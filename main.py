@@ -244,11 +244,10 @@ def dice_coef(true, pred):
 
 
 #### Metric function for classification
-def metric_fn(per_example_loss, gt_masks, logits):
+def metric_fn(per_example_loss, gt_masks, predictions):
     # classification loss & accuracy
     loss = tf.metrics.mean(tf.reduce_mean(per_example_loss, axis=(-1, -2)))
 
-    predictions = tf.argmax(logits, axis=-1, output_type=tf.int32)
     brats_classes = ['whole', 'core', 'enhancing']
     dice_scores = {}
     for brats_class in brats_classes:
@@ -362,14 +361,23 @@ def get_model_fn():
 
         #### Evaluation mode
         if mode == tf.estimator.ModeKeys.EVAL:
+            predictions = tf.argmax(sup_logits, axis=-1, output_type=tf.int32)
+            eval_metrics = metric_fn(sup_loss, sup_masks, predictions)
 
-            eval_metrics = metric_fn(sup_loss, sup_masks, sup_logits)
+            tf.summary.image('gt_mask', tf.expand_dims(sup_masks, -1), 1)
+            tf.summary.image('pred_mask', tf.expand_dims(predictions, -1), 1)
+
+            eval_summary_hook = tf.train.SummarySaverHook(
+                save_steps=FLAGS.save_steps,
+                output_dir=FLAGS.model_dir,
+                summary_op=tf.summary.merge_all())
 
             #### Constucting evaluation TPUEstimatorSpec.
             eval_spec = tf.estimator.EstimatorSpec(
                 mode=mode,
                 loss=avg_sup_loss,
-                eval_metric_ops=eval_metrics)
+                eval_metric_ops=eval_metrics,
+                evaluation_hooks=[eval_summary_hook])
 
             return eval_spec
 
