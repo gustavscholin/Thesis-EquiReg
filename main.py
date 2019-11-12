@@ -492,7 +492,8 @@ def train():
         #     curr_step += FLAGS.save_steps
 
         train_spec = tf.estimator.TrainSpec(input_fn=train_input_fn, max_steps=FLAGS.train_steps)
-        eval_spec = tf.estimator.EvalSpec(input_fn=eval_input_fn, steps=eval_steps)
+        eval_spec = tf.estimator.EvalSpec(input_fn=eval_input_fn, steps=eval_steps,
+                                          start_delay_secs=0, throttle_secs=10)
         tf.estimator.train_and_evaluate(estimator, train_spec, eval_spec)
     else:
         if FLAGS.do_train:
