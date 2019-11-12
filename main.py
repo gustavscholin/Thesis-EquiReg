@@ -243,6 +243,28 @@ def dice_coef(true, pred):
     return dice_coefs
 
 
+#### Metric function for classification
+def metric_fn(per_example_loss, gt_masks, logits):
+    # classification loss & accuracy
+    # loss = tf.metrics.mean(tf.reduce_mean(per_example_loss, axis=(-1, -2)))
+
+    predictions = tf.argmax(logits, axis=-1, output_type=tf.int32)
+    brats_classes = ['whole', 'core', 'enhancing']
+    dice_scores = {}
+    for brats_class in brats_classes:
+        true, pred = class_convert(gt_masks, predictions, brats_class)
+        dice_scores[brats_class] = tf.metrics.mean(dice_coef(true, pred))
+
+    ret_dict = {
+        # "eval/classify_loss": loss,
+        "eval/classify_whole_dice": dice_scores['whole'],
+        "eval/classify_core_dice": dice_scores['core'],
+        "eval/classify_enhancing_dice": dice_scores['enhancing']
+    }
+
+    return ret_dict
+
+
 def get_model_fn():
     def model_fn(features, labels, mode, params):
         model = DenseNetFCN((224, 224, 4), classes=FLAGS.num_classes)
@@ -340,28 +362,8 @@ def get_model_fn():
 
         #### Evaluation mode
         if mode == tf.estimator.ModeKeys.EVAL:
-            #### Metric function for classification
-            def metric_fn(per_example_loss, gt_masks, logits):
-                # classification loss & accuracy
-                # loss = tf.metrics.mean(tf.reduce_mean(per_example_loss, axis=(-1, -2)))
 
-                predictions = tf.argmax(logits, axis=-1, output_type=tf.int32)
-                brats_classes = ['whole', 'core', 'enhancing']
-                dice_scores = {}
-                for brats_class in brats_classes:
-                    true, pred = class_convert(gt_masks, predictions, brats_class)
-                    dice_scores[brats_class] = tf.metrics.mean(dice_coef(true, pred))
-
-                ret_dict = {
-                    # "eval/classify_loss": loss,
-                    "eval/classify_whole_dice": dice_scores['whole'],
-                    "eval/classify_core_dice": dice_scores['core'],
-                    "eval/classify_enhancing_dice": dice_scores['enhancing']
-                }
-
-                return ret_dict
-
-            eval_metrics = (metric_fn, [sup_loss, sup_masks, sup_logits])
+            eval_metrics = metric_fn(sup_loss, sup_masks, sup_logits)
 
             #### Constucting evaluation TPUEstimatorSpec.
             eval_spec = tf.estimator.EstimatorSpec(
