@@ -343,7 +343,7 @@ def get_model_fn():
             #### Metric function for classification
             def metric_fn(per_example_loss, gt_masks, logits):
                 # classification loss & accuracy
-                loss = tf.metrics.mean(tf.reduce_mean(per_example_loss, axis=(-1, -2)))
+                # loss = tf.metrics.mean(tf.reduce_mean(per_example_loss, axis=(-1, -2)))
 
                 predictions = tf.argmax(logits, axis=-1, output_type=tf.int32)
                 brats_classes = ['whole', 'core', 'enhancing']
@@ -353,7 +353,7 @@ def get_model_fn():
                     dice_scores[brats_class] = tf.metrics.mean(dice_coef(true, pred))
 
                 ret_dict = {
-                    "eval/classify_loss": loss,
+                    # "eval/classify_loss": loss,
                     "eval/classify_whole_dice": dice_scores['whole'],
                     "eval/classify_core_dice": dice_scores['core'],
                     "eval/classify_enhancing_dice": dice_scores['enhancing']
@@ -364,10 +364,10 @@ def get_model_fn():
             eval_metrics = (metric_fn, [sup_loss, sup_masks, sup_logits])
 
             #### Constucting evaluation TPUEstimatorSpec.
-            eval_spec = tf.contrib.tpu.TPUEstimatorSpec(
+            eval_spec = tf.estimator.EstimatorSpec(
                 mode=mode,
-                loss=total_loss,
-                eval_metrics=eval_metrics)
+                loss=avg_sup_loss,
+                eval_metric_ops=eval_metrics)
 
             return eval_spec
 
@@ -414,32 +414,21 @@ def get_model_fn():
         metric_dict["training/lr"] = learning_rate
         metric_dict["training/step"] = global_step
 
-        if not FLAGS.use_tpu:
-            log_info = ("step [{training/step}] lr {training/lr:.6f} "
-                        "loss {training/loss:.4f} "
-                        "sup/acc {sup/acc:.4f} sup/loss {sup/sup_loss:.6f} ")
-            if FLAGS.unsup_ratio > 0:
-                log_info += "unsup/loss {unsup/loss:.6f} "
-            formatter = lambda kwargs: log_info.format(**kwargs)
-            logging_hook = tf.train.LoggingTensorHook(
-                tensors=metric_dict,
-                every_n_iter=FLAGS.iterations,
-                formatter=formatter)
-            training_hooks = [logging_hook]
-            #### Constucting training TPUEstimatorSpec.
-            train_spec = tf.contrib.tpu.TPUEstimatorSpec(
-                mode=mode, loss=total_loss, train_op=train_op,
-                training_hooks=training_hooks)
-        else:
-            #### Constucting training TPUEstimatorSpec.
-            host_call = utils.construct_scalar_host_call(
-                metric_dict=metric_dict,
-                model_dir=params["model_dir"],
-                prefix="",
-                reduce_fn=tf.reduce_mean)
-            train_spec = tf.contrib.tpu.TPUEstimatorSpec(
-                mode=mode, loss=total_loss, train_op=train_op,
-                host_call=host_call)
+        log_info = ("step [{training/step}] lr {training/lr:.6f} "
+                    "loss {training/loss:.4f} "
+                    "sup/acc {sup/acc:.4f} sup/loss {sup/sup_loss:.6f} ")
+        if FLAGS.unsup_ratio > 0:
+            log_info += "unsup/loss {unsup/loss:.6f} "
+        formatter = lambda kwargs: log_info.format(**kwargs)
+        logging_hook = tf.train.LoggingTensorHook(
+            tensors=metric_dict,
+            every_n_iter=FLAGS.iterations,
+            formatter=formatter)
+        training_hooks = [logging_hook]
+        #### Constucting training TPUEstimatorSpec.
+        train_spec = tf.estimator.EstimatorSpec(
+            mode=mode, loss=total_loss, train_op=train_op,
+            training_hooks=training_hooks)
 
         return train_spec
 
@@ -460,6 +449,7 @@ def train():
             data_dir=FLAGS.data_dir,
             split="train",
             data_sizes=data_sizes,
+            batch_size=FLAGS.train_batch_size,
             sup_cut=FLAGS.sup_cut,
             unsup_cut=FLAGS.unsup_cut,
             unsup_ratio=FLAGS.unsup_ratio,
@@ -470,6 +460,7 @@ def train():
             data_dir=FLAGS.data_dir,
             split="val",
             data_sizes=data_sizes,
+            batch_size=FLAGS.eval_batch_size,
             sup_cut=1.0,
             unsup_cut=0.0,
             unsup_ratio=0
@@ -479,7 +470,7 @@ def train():
 
     ##### Get model function
     model_fn = get_model_fn()
-    estimator = utils.get_TPU_estimator(FLAGS, model_fn)
+    estimator = utils.get_estimator(FLAGS, model_fn)
 
     #### Training
     if FLAGS.do_eval_along_training:
@@ -488,15 +479,19 @@ def train():
         tf.logging.info("  Unsupervised batch size = %d",
                         FLAGS.train_batch_size * FLAGS.unsup_ratio)
         tf.logging.info("  Num train steps = %d", FLAGS.train_steps)
-        curr_step = 0
-        while True:
-            if curr_step >= FLAGS.train_steps:
-                break
-            tf.logging.info("Current step {}".format(curr_step))
-            train_step = min(FLAGS.save_steps, FLAGS.train_steps - curr_step)
-            estimator.train(input_fn=train_input_fn, steps=train_step)
-            estimator.evaluate(input_fn=eval_input_fn, steps=eval_steps)
-            curr_step += FLAGS.save_steps
+        # curr_step = 0
+        # while True:
+        #     if curr_step >= FLAGS.train_steps:
+        #         break
+        #     tf.logging.info("Current step {}".format(curr_step))
+        #     train_step = min(FLAGS.save_steps, FLAGS.train_steps - curr_step)
+        #     estimator.train(input_fn=train_input_fn, steps=train_step)
+        #     estimator.evaluate(input_fn=eval_input_fn, steps=eval_steps)
+        #     curr_step += FLAGS.save_steps
+
+        train_spec = tf.estimator.TrainSpec(input_fn=train_input_fn, max_steps=FLAGS.train_steps)
+        eval_spec = tf.estimator.EvalSpec(input_fn=eval_input_fn, steps=eval_steps)
+        tf.estimator.train_and_evaluate(estimator, train_spec, eval_spec)
     else:
         if FLAGS.do_train:
             tf.logging.info("***** Running training *****")

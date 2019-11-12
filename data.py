@@ -107,10 +107,9 @@ def get_dataset(type, data_dir, record_spec,
 
 
 def get_input_fn(
-        data_dir, split, data_sizes, sup_cut=0.1,
+        data_dir, split, data_sizes, batch_size, sup_cut=0.1,
         unsup_cut=1.0, unsup_ratio=0, shuffle_seed=None):
     def input_fn(params):
-        per_core_bsz = params["batch_size"]
 
         size = data_sizes['{}_size'.format(split)]
         sup_cut_size = int(math.ceil(sup_cut * size))
@@ -130,7 +129,7 @@ def get_input_fn(
                 data_dir=data_dir,
                 record_spec=record_spec,
                 split=split,
-                per_core_bsz=per_core_bsz,
+                per_core_bsz=batch_size,
                 size=size,
                 cut_size=sup_cut_size,
                 seed=shuffle_seed
@@ -143,7 +142,7 @@ def get_input_fn(
                 data_dir=data_dir,
                 record_spec=record_spec,
                 split=split,
-                per_core_bsz=per_core_bsz * unsup_ratio,
+                per_core_bsz=batch_size * unsup_ratio,
                 size=size,
                 cut_size=unsup_cut_size,
                 seed=shuffle_seed
