@@ -246,7 +246,7 @@ def dice_coef(true, pred):
 #### Metric function for classification
 def metric_fn(per_example_loss, gt_masks, logits):
     # classification loss & accuracy
-    # loss = tf.metrics.mean(tf.reduce_mean(per_example_loss, axis=(-1, -2)))
+    loss = tf.metrics.mean(tf.reduce_mean(per_example_loss, axis=(-1, -2)))
 
     predictions = tf.argmax(logits, axis=-1, output_type=tf.int32)
     brats_classes = ['whole', 'core', 'enhancing']
@@ -256,7 +256,7 @@ def metric_fn(per_example_loss, gt_masks, logits):
         dice_scores[brats_class] = tf.metrics.mean(dice_coef(true, pred))
 
     ret_dict = {
-        # "eval/classify_loss": loss,
+        "eval/classify_loss": loss,
         "eval/classify_whole_dice": dice_scores['whole'],
         "eval/classify_core_dice": dice_scores['core'],
         "eval/classify_enhancing_dice": dice_scores['enhancing']
