@@ -364,7 +364,7 @@ def get_model_fn():
             predictions = tf.argmax(sup_logits, axis=-1, output_type=tf.int32)
             eval_metrics = metric_fn(sup_loss, sup_masks, predictions)
 
-            tf.summary.image('input', tf.expand_dims(all_images[..., 0]), sup_bsz)
+            tf.summary.image('input', tf.expand_dims(all_images[..., 0], -1), sup_bsz)
             tf.summary.image('gt_mask', tf.cast(tf.expand_dims(sup_masks, -1), tf.uint8), sup_bsz)
             tf.summary.image('pred_mask', tf.cast(tf.expand_dims(predictions, -1), tf.uint8), sup_bsz)
 
