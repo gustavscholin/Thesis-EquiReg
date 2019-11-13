@@ -368,7 +368,7 @@ def get_model_fn():
             tf.summary.image('pred_mask', tf.cast(tf.expand_dims(predictions, -1), tf.uint8), 1)
 
             eval_summary_hook = tf.train.SummarySaverHook(
-                save_steps=FLAGS.save_steps,
+                save_steps=5,
                 output_dir=FLAGS.model_dir,
                 summary_op=tf.summary.merge_all())
 
