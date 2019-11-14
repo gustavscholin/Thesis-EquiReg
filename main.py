@@ -424,7 +424,7 @@ def get_model_fn():
 
         log_info = ("step [{training/step}] lr {training/lr:.6f} "
                     "loss {training/loss:.4f} "
-                    "sup/acc {sup/acc:.4f} sup/loss {sup/sup_loss:.6f} ")
+                    "sup/acc {sup/acc:.4f} sup/loss {sup/sup_loss:.6f}  learn_phase {training/LEARN} ")
         if FLAGS.unsup_ratio > 0:
             log_info += "unsup/loss {unsup/loss:.6f} "
         formatter = lambda kwargs: log_info.format(**kwargs)
