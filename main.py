@@ -253,6 +253,7 @@ def get_model_fn():
         #### Configuring the optimizer
         global_step = tf.train.get_global_step()
         metric_dict = {}
+        tf.keras.backend.set_learning_phase(int(mode == tf.estimator.ModeKeys.TRAIN))
         is_training = (mode == tf.estimator.ModeKeys.TRAIN)
         if FLAGS.unsup_ratio > 0 and is_training:
             all_images = tf.concat([features["image"],
@@ -359,7 +360,6 @@ def get_model_fn():
                 "eval/classify_enhancing_dice": dice_scores['enhancing']
             }
 
-            tf.summary.scalar('learning_phase', tf.cast(tf.keras.backend.learning_phase(), tf.int8))
             tf.summary.image('input', tf.expand_dims(all_images[..., 0], -1), 2)
             tf.summary.image('gt_mask', tf.cast(tf.expand_dims(sup_masks, -1), tf.float32), 2)
             tf.summary.image('pred_mask', tf.cast(tf.expand_dims(predictions, -1), tf.float32), 2)
@@ -420,11 +420,10 @@ def get_model_fn():
         metric_dict["sup/acc"] = acc
         metric_dict["training/lr"] = learning_rate
         metric_dict["training/step"] = global_step
-        metric_dict["training/LEARN"] = tf.cast(tf.keras.backend.learning_phase(), tf.int8)
 
         log_info = ("step [{training/step}] lr {training/lr:.6f} "
                     "loss {training/loss:.4f} "
-                    "sup/acc {sup/acc:.4f} sup/loss {sup/sup_loss:.6f}  learn_phase {training/LEARN} ")
+                    "sup/acc {sup/acc:.4f} sup/loss {sup/sup_loss:.6f} ")
         if FLAGS.unsup_ratio > 0:
             log_info += "unsup/loss {unsup/loss:.6f} "
         formatter = lambda kwargs: log_info.format(**kwargs)
