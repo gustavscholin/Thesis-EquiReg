@@ -218,6 +218,7 @@ def get_ent(logits, return_mean=True):
     return ent
 
 
+@tf.function
 def class_convert(true_masks, pred_masks, brats_class):
     brats_class_mapping = {
         'whole': tf.constant([0, 1, 1, 1], dtype='float32'),
@@ -230,9 +231,10 @@ def class_convert(true_masks, pred_masks, brats_class):
     bool_true_masks = tf.tensordot(tf.cast(true_masks, tf.float32), brats_class_mapping[brats_class], axes=1)
     bool_pred_masks = tf.tensordot(tf.cast(pred_masks, tf.float32), brats_class_mapping[brats_class], axes=1)
 
-    return tf.cast(bool_true_masks, tf.int32), tf.cast(bool_pred_masks, tf.int32)
+    return tf.tuple([tf.cast(bool_true_masks, tf.int32), tf.cast(bool_pred_masks, tf.int32)])
 
 
+@tf.function
 def dice_coef(true, pred):
     tp = tf.reduce_sum(tf.cast(tf.logical_and(tf.equal(true, 1), tf.equal(pred, 1)), tf.float32), axis=(-1, -2))
     fp = tf.reduce_sum(tf.cast(tf.logical_and(tf.equal(true, 0), tf.equal(pred, 1)), tf.float32), axis=(-1, -2))
@@ -241,27 +243,6 @@ def dice_coef(true, pred):
     dice_coefs = tf.math.divide_no_nan(2*tp, 2*tp + fp + fn) + tf.cast(tf.equal(tp + fp + fn, 0), tf.float32)
 
     return dice_coefs
-
-
-#### Metric function for classification
-def metric_fn(per_example_loss, gt_masks, predictions):
-    # classification loss & accuracy
-    loss = tf.metrics.mean(tf.reduce_mean(per_example_loss, axis=(-1, -2)))
-
-    brats_classes = ['whole', 'core', 'enhancing']
-    dice_scores = {}
-    for brats_class in brats_classes:
-        true, pred = class_convert(gt_masks, predictions, brats_class)
-        dice_scores[brats_class] = tf.metrics.mean(dice_coef(true, pred))
-
-    ret_dict = {
-        "eval/classify_loss": loss,
-        "eval/classify_whole_dice": dice_scores['whole'],
-        "eval/classify_core_dice": dice_scores['core'],
-        "eval/classify_enhancing_dice": dice_scores['enhancing']
-    }
-
-    return ret_dict
 
 
 def get_model_fn():
@@ -362,8 +343,23 @@ def get_model_fn():
         #### Evaluation mode
         if mode == tf.estimator.ModeKeys.EVAL:
             predictions = tf.argmax(sup_logits, axis=-1, output_type=tf.int32)
-            eval_metrics = metric_fn(sup_loss, sup_masks, predictions)
 
+            loss = tf.metrics.mean(tf.reduce_mean(sup_loss, axis=(-1, -2)))
+
+            brats_classes = ['whole', 'core', 'enhancing']
+            dice_scores = {}
+            for brats_class in brats_classes:
+                true, pred = class_convert(sup_masks, predictions, brats_class)
+                dice_scores[brats_class] = tf.metrics.mean(dice_coef(true, pred))
+
+            eval_metrics = {
+                "eval/classify_loss": loss,
+                "eval/classify_whole_dice": dice_scores['whole'],
+                "eval/classify_core_dice": dice_scores['core'],
+                "eval/classify_enhancing_dice": dice_scores['enhancing']
+            }
+
+            tf.summary.scalar('learning_phase', tf.keras.backend.learning_phase())
             tf.summary.image('input', tf.expand_dims(all_images[..., 0], -1), 2)
             tf.summary.image('gt_mask', tf.cast(tf.expand_dims(sup_masks, -1), tf.float32), 2)
             tf.summary.image('pred_mask', tf.cast(tf.expand_dims(predictions, -1), tf.float32), 2)
@@ -436,13 +432,7 @@ def get_model_fn():
             every_n_iter=FLAGS.iterations,
             formatter=formatter)
 
-        tf.summary.scalar('non_zero_gt', tf.math.count_nonzero(sup_masks))
-        train_summary_hook = tf.train.SummarySaverHook(
-            save_steps=10,
-            output_dir=FLAGS.model_dir,
-            summary_op=tf.summary.merge_all())
-
-        training_hooks = [logging_hook, train_summary_hook]
+        training_hooks = [logging_hook]
         #### Constucting training TPUEstimatorSpec.
         train_spec = tf.estimator.EstimatorSpec(
             mode=mode, loss=total_loss, train_op=train_op,
