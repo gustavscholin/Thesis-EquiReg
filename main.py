@@ -420,6 +420,7 @@ def get_model_fn():
         metric_dict["sup/acc"] = acc
         metric_dict["training/lr"] = learning_rate
         metric_dict["training/step"] = global_step
+        metric_dict["training/LEARN"] = tf.cast(tf.keras.backend.learning_phase(), tf.int8)
 
         log_info = ("step [{training/step}] lr {training/lr:.6f} "
                     "loss {training/loss:.4f} "
