@@ -364,12 +364,12 @@ def get_model_fn():
             predictions = tf.argmax(sup_logits, axis=-1, output_type=tf.int32)
             eval_metrics = metric_fn(sup_loss, sup_masks, predictions)
 
-            tf.summary.image('input', tf.expand_dims(all_images[..., 0], -1), 8)
-            tf.summary.image('gt_mask', tf.cast(tf.expand_dims(sup_masks, -1), tf.float32), 8)
-            tf.summary.image('pred_mask', tf.cast(tf.expand_dims(predictions, -1), tf.float32), 8)
+            tf.summary.image('input', tf.expand_dims(all_images[..., 0], -1), 2)
+            tf.summary.image('gt_mask', tf.cast(tf.expand_dims(sup_masks, -1), tf.float32), 2)
+            tf.summary.image('pred_mask', tf.cast(tf.expand_dims(predictions, -1), tf.float32), 2)
 
             eval_summary_hook = tf.train.SummarySaverHook(
-                save_secs=10,
+                save_steps=800,
                 output_dir=FLAGS.model_dir,
                 summary_op=tf.summary.merge_all())
 
