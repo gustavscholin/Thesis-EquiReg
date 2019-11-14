@@ -359,7 +359,7 @@ def get_model_fn():
                 "eval/classify_enhancing_dice": dice_scores['enhancing']
             }
 
-            tf.summary.scalar('learning_phase', tf.keras.backend.learning_phase())
+            tf.summary.scalar('learning_phase', tf.cast(tf.keras.backend.learning_phase(), tf.int8))
             tf.summary.image('input', tf.expand_dims(all_images[..., 0], -1), 2)
             tf.summary.image('gt_mask', tf.cast(tf.expand_dims(sup_masks, -1), tf.float32), 2)
             tf.summary.image('pred_mask', tf.cast(tf.expand_dims(predictions, -1), tf.float32), 2)
