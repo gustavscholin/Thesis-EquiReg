@@ -247,13 +247,13 @@ def dice_coef(true, pred):
 
 def get_model_fn():
     def model_fn(features, labels, mode, params):
+        tf.keras.backend.set_learning_phase(int(mode == tf.estimator.ModeKeys.TRAIN))
         model = DenseNetFCN((224, 224, 4), classes=FLAGS.num_classes)
         sup_masks = features['seg_mask']
 
         #### Configuring the optimizer
         global_step = tf.train.get_global_step()
         metric_dict = {}
-        tf.keras.backend.set_learning_phase(int(mode == tf.estimator.ModeKeys.TRAIN))
         is_training = (mode == tf.estimator.ModeKeys.TRAIN)
         if FLAGS.unsup_ratio > 0 and is_training:
             all_images = tf.concat([features["image"],
