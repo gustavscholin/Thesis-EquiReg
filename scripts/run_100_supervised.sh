@@ -1,5 +1,4 @@
 python main.py \
-  --use_tpu=False \
   --do_eval_along_training=True \
   --sup_cut=1.0 \
   --unsup_cut=0. \

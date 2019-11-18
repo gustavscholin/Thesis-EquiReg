@@ -97,15 +97,23 @@ flags.DEFINE_string(
     "model_dir", default=None,
     help="model dir of the saved checkpoints.")
 flags.DEFINE_bool(
-    "do_train", default=True,
+    "do_train", default=False,
     help="Whether to run training.")
 flags.DEFINE_bool(
-    "do_eval", default=True,
+    "do_eval", default=False,
     help="Whether to run eval on the test set.")
 flags.DEFINE_bool(
     "do_eval_along_training", default=True,
     help="Whether to run eval on the test set during training. "
          "This is only used to debug.")
+flags.DEFINE_bool(
+    'do_predict', default=True,
+    help='Whether to run predict.'
+)
+flags.DEFINE_string(
+    'pred_ckpt', default=None,
+    help='Checkpoint to run prediction on.'
+)
 flags.DEFINE_bool(
     "verbose", default=False,
     help="Whether to print additional information.")
@@ -240,14 +248,13 @@ def dice_coef(true, pred):
     fp = tf.reduce_sum(tf.cast(tf.logical_and(tf.equal(true, 0), tf.equal(pred, 1)), tf.float32), axis=(-1, -2))
     fn = tf.reduce_sum(tf.cast(tf.logical_and(tf.equal(true, 1), tf.equal(pred, 0)), tf.float32), axis=(-1, -2))
 
-    dice_coefs = tf.math.divide_no_nan(2*tp, 2*tp + fp + fn) + tf.cast(tf.equal(tp + fp + fn, 0), tf.float32)
+    dice_coefs = tf.math.divide_no_nan(2 * tp, 2 * tp + fp + fn) + tf.cast(tf.equal(tp + fp + fn, 0), tf.float32)
 
     return dice_coefs
 
 
 def get_model_fn():
     def model_fn(features, labels, mode, params):
-        tf.keras.backend.set_learning_phase(int(mode == tf.estimator.ModeKeys.TRAIN))
         model = DenseNetFCN((224, 224, 4), classes=FLAGS.num_classes)
         sup_masks = features['seg_mask']
 
@@ -262,18 +269,42 @@ def get_model_fn():
         else:
             all_images = features["image"]
 
-        with tf.variable_scope("model", reuse=tf.AUTO_REUSE):
-            all_logits = model(all_images, training=True)
+        # with tf.variable_scope("model", reuse=tf.AUTO_REUSE):
+        all_logits = model(all_images, training=is_training)
 
-            sup_bsz = tf.shape(features["image"])[0]
-            sup_logits = all_logits[:sup_bsz]
+        sup_bsz = tf.shape(features["image"])[0]
+        sup_logits = all_logits[:sup_bsz]
 
-            sup_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(
-                labels=sup_masks,
-                logits=sup_logits)
-            sup_prob = tf.nn.softmax(sup_logits, axis=-1)
-            metric_dict["sup/pred_prob"] = tf.reduce_mean(tf.reduce_mean(
-                tf.reduce_max(sup_prob, axis=-1), axis=(-1, -2)))
+        if mode == tf.estimator.ModeKeys.PREDICT:
+            predictions = tf.argmax(sup_logits, axis=-1, output_type=tf.int32)
+
+            brats_classes = ['whole', 'core', 'enhancing']
+            dice_scores = {}
+            for brats_class in brats_classes:
+                true, pred = class_convert(sup_masks, predictions, brats_class)
+                dice_scores[brats_class] = dice_coef(true, pred)
+
+            output = {
+                'prediction': predictions,
+                'ground_truth': sup_masks,
+                "whole_dice": dice_scores['whole'],
+                "core_dice": dice_scores['core'],
+                "enhancing_dice": dice_scores['enhancing']
+            }
+
+            return tf.estimator.EstimatorSpec(
+                mode=mode,
+                predictions=output,
+                export_outputs={
+                    'output': tf.estimator.export.PredictOutput(output)
+                })
+
+        sup_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(
+            labels=sup_masks,
+            logits=sup_logits)
+        sup_prob = tf.nn.softmax(sup_logits, axis=-1)
+        metric_dict["sup/pred_prob"] = tf.reduce_mean(tf.reduce_mean(
+            tf.reduce_max(sup_prob, axis=-1), axis=(-1, -2)))
         if FLAGS.tsa:
             # TODO: Implement TSA
             sup_loss, avg_sup_loss = anneal_sup_loss(sup_logits, sup_masks, sup_loss,
@@ -374,7 +405,7 @@ def get_model_fn():
                 mode=mode,
                 loss=avg_sup_loss,
                 eval_metric_ops=eval_metrics)
-                # evaluation_hooks=[eval_summary_hook])
+            # evaluation_hooks=[eval_summary_hook])
 
             return eval_spec
 
@@ -444,7 +475,7 @@ def get_model_fn():
 
 
 def train():
-    ##### Create input function
+    # Create input function
     with tf.gfile.Open(os.path.join(FLAGS.data_dir, 'data_sizes.json'), 'r') as fp:
         data_sizes = json.load(fp)
     if FLAGS.unsup_ratio == 0:
@@ -463,7 +494,7 @@ def train():
             unsup_ratio=FLAGS.unsup_ratio,
         )
 
-    if FLAGS.do_eval:
+    if FLAGS.do_eval or FLAGS.do_predict:
         eval_input_fn = data.get_input_fn(
             data_dir=FLAGS.data_dir,
             split="val",
@@ -476,11 +507,11 @@ def train():
         eval_size = data_sizes['val_size']
         eval_steps = eval_size // FLAGS.eval_batch_size
 
-    ##### Get model function
+    # Get model function
     model_fn = get_model_fn()
     estimator = utils.get_estimator(FLAGS, model_fn)
 
-    #### Training
+    # Training
     if FLAGS.do_eval_along_training:
         tf.logging.info("***** Running training & evaluation *****")
         tf.logging.info("  Supervised batch size = %d", FLAGS.train_batch_size)
@@ -518,6 +549,31 @@ def train():
             acc = results["eval/classify_accuracy"]
             with tf.gfile.Open("{}/results.txt".format(FLAGS.model_dir), "w") as ouf:
                 ouf.write(str(acc))
+    if FLAGS.do_predict:
+        tf.logging.info('***** Running prediction *****')
+        if FLAGS.pred_ckpt:
+            file_name = FLAGS.pred_ckpt
+            checkpoint_path = os.path.join(FLAGS.model_dir, FLAGS.pred_ckpt)
+        else:
+            file_name = 'latest_ckpt'
+            checkpoint_path = None
+        output = estimator.predict(input_fn=eval_input_fn, checkpoint_path=checkpoint_path)
+        preds = np.zeros((0, 224, 224))
+        gts = np.zeros((0, 224, 224))
+        w_dice = np.array([])
+        c_dice = np.array([])
+        e_dice = np.array([])
+        for example in output:
+            if not np.any(example['ground_truth']):
+                continue
+            preds = np.vstack([preds, np.expand_dims(example['prediction'], axis=0)])
+            gts = np.vstack([gts, np.expand_dims(example['ground_truth'], axis=0)])
+            w_dice = np.append(w_dice, example['whole_dice'])
+            c_dice = np.append(c_dice, example['core_dice'])
+            e_dice = np.append(e_dice, example['enhancing_dice'])
+
+        np.savez_compressed(os.path.join(FLAGS.model_dir, '{}_prediction'.format(file_name)), predictions=preds,
+                            ground_truths=gts, whole_dice=w_dice, core_dice=c_dice, enhancing_dice=e_dice)
 
 
 def main(_):
