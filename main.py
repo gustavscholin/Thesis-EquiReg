@@ -583,7 +583,7 @@ def train():
         for example in output:
             if not np.any(example['ground_truth']):
                 continue
-            example += 1
+            example_cnt += 1
             if example_cnt % 500:
                 tf.logging.info('Predicting: {} examples'.format(example_cnt))
             preds.append(example['prediction'])
