@@ -558,20 +558,45 @@ def train():
             file_name = 'latest_ckpt'
             checkpoint_path = None
         output = estimator.predict(input_fn=eval_input_fn, checkpoint_path=checkpoint_path)
-        preds = np.zeros((0, 224, 224))
-        gts = np.zeros((0, 224, 224))
-        w_dice = np.array([])
-        c_dice = np.array([])
-        e_dice = np.array([])
+        # preds = np.zeros((0, 224, 224))
+        # gts = np.zeros((0, 224, 224))
+        # w_dice = np.array([])
+        # c_dice = np.array([])
+        # e_dice = np.array([])
+        # for example in output:
+        #     if not np.any(example['ground_truth']):
+        #         continue
+        #     tf.logging.info('predicting...')
+        #     preds = np.vstack([preds, np.expand_dims(example['prediction'], axis=0)])
+        #     gts = np.vstack([gts, np.expand_dims(example['ground_truth'], axis=0)])
+        #     w_dice = np.append(w_dice, example['whole_dice'])
+        #     c_dice = np.append(c_dice, example['core_dice'])
+        #     e_dice = np.append(e_dice, example['enhancing_dice'])
+
+        preds = []
+        gts = []
+        w_dice = []
+        c_dice = []
+        e_dice = []
+
+        example_cnt = 0
         for example in output:
             if not np.any(example['ground_truth']):
                 continue
-            tf.logging.info('predicting...')
-            preds = np.vstack([preds, np.expand_dims(example['prediction'], axis=0)])
-            gts = np.vstack([gts, np.expand_dims(example['ground_truth'], axis=0)])
-            w_dice = np.append(w_dice, example['whole_dice'])
-            c_dice = np.append(c_dice, example['core_dice'])
-            e_dice = np.append(e_dice, example['enhancing_dice'])
+            example += 1
+            if example_cnt % 500:
+                tf.logging.info('Predicting: {} examples'.format(example_cnt))
+            preds.append(example['prediction'])
+            gts.append(example['ground_truth'])
+            w_dice.append(example['whole_dice'])
+            c_dice.append(example['core_dice'])
+            e_dice.append(example['enhancing_dice'])
+
+        preds = np.stack(preds)
+        gts = np.stack(gts)
+        w_dice = np.stack(w_dice)
+        c_dice = np.stack(c_dice)
+        e_dice = np.stack(e_dice)
 
         np.savez_compressed(os.path.join(FLAGS.model_dir, '{}_prediction'.format(file_name)), predictions=preds,
                             ground_truths=gts, whole_dice=w_dice, core_dice=c_dice, enhancing_dice=e_dice)
