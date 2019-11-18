@@ -566,6 +566,7 @@ def train():
         for example in output:
             if not np.any(example['ground_truth']):
                 continue
+            tf.logging.info('predicting...')
             preds = np.vstack([preds, np.expand_dims(example['prediction'], axis=0)])
             gts = np.vstack([gts, np.expand_dims(example['ground_truth'], axis=0)])
             w_dice = np.append(w_dice, example['whole_dice'])
