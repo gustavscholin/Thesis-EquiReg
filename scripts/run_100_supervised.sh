@@ -6,5 +6,6 @@ python main.py \
   --shuffle_seed=42 \
   --train_batch_size=2 \
   --train_steps=100000 \
+  --max_save=10 \
   --data_dir=data/processed_data \
   --model_dir=ckpt/100_supervised

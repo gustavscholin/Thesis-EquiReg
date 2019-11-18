@@ -391,21 +391,21 @@ def get_model_fn():
                 "eval/classify_enhancing_dice": dice_scores['enhancing']
             }
 
-            # tf.summary.image('input', tf.expand_dims(all_images[..., 0], -1), 2)
-            # tf.summary.image('gt_mask', tf.cast(tf.expand_dims(sup_masks, -1), tf.float32), 2)
-            # tf.summary.image('pred_mask', tf.cast(tf.expand_dims(predictions, -1), tf.float32), 2)
-            #
-            # eval_summary_hook = tf.train.SummarySaverHook(
-            #     save_secs=120,
-            #     output_dir=FLAGS.model_dir,
-            #     summary_op=tf.summary.merge_all())
+            tf.summary.image('input', tf.expand_dims(all_images[..., 0], -1), 2)
+            tf.summary.image('gt_mask', tf.cast(tf.expand_dims(sup_masks, -1), tf.float32), 2)
+            tf.summary.image('pred_mask', tf.cast(tf.expand_dims(predictions, -1), tf.float32), 2)
+
+            eval_summary_hook = tf.train.SummarySaverHook(
+                save_secs=120,
+                output_dir=FLAGS.model_dir,
+                summary_op=tf.summary.merge_all())
 
             #### Constucting evaluation TPUEstimatorSpec.
             eval_spec = tf.estimator.EstimatorSpec(
                 mode=mode,
                 loss=avg_sup_loss,
-                eval_metric_ops=eval_metrics)
-            # evaluation_hooks=[eval_summary_hook])
+                eval_metric_ops=eval_metrics,
+                evaluation_hooks=[eval_summary_hook])
 
             return eval_spec
 
@@ -584,7 +584,7 @@ def train():
             if not np.any(example['ground_truth']):
                 continue
             example_cnt += 1
-            if example_cnt % 500:
+            if example_cnt % 500 == 0:
                 tf.logging.info('Predicting: {} examples'.format(example_cnt))
             preds.append(example['prediction'])
             gts.append(example['ground_truth'])
