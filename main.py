@@ -26,6 +26,7 @@ import utils
 
 from absl import flags
 from models.tiramisu import DenseNetFCN
+from models.tiramisu_tf import DenseTiramisu
 from augmenters import unsup_logits_aug
 
 os.environ['KMP_AFFINITY'] = 'disabled'
@@ -255,7 +256,9 @@ def dice_coef(true, pred):
 
 def get_model_fn():
     def model_fn(features, labels, mode, params):
-        model = DenseNetFCN((224, 224, 4), classes=FLAGS.num_classes)
+        # tf.keras.backend.set_learning_phase(mode == tf.estimator.ModeKeys.TRAIN)
+        # model = DenseNetFCN((224, 224, 4), classes=FLAGS.num_classes)
+        model = DenseTiramisu(growth_k=16, layers_per_block=[4, 5, 7, 10, 12, 15], num_classes=FLAGS.num_classes)
         sup_masks = features['seg_mask']
 
         #### Configuring the optimizer
@@ -269,8 +272,8 @@ def get_model_fn():
         else:
             all_images = features["image"]
 
-        # with tf.variable_scope("model", reuse=tf.AUTO_REUSE):
-        all_logits = model(all_images, training=is_training)
+        with tf.variable_scope("model", reuse=tf.AUTO_REUSE):
+            all_logits = model.model(all_images, is_training)
 
         sup_bsz = tf.shape(features["image"])[0]
         sup_logits = all_logits[:sup_bsz]
