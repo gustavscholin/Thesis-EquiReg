@@ -4,7 +4,7 @@ python main.py \
   --unsup_cut=0. \
   --unsup_ratio=0 \
   --shuffle_seed=42 \
-  --train_batch_size=2 \
+  --train_batch_size=4 \
   --train_steps=100000 \
   --max_save=10 \
   --data_dir=data/processed_data \

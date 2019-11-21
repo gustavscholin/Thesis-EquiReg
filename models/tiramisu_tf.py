@@ -36,7 +36,7 @@ class DenseTiramisu(object):
             # x = tf.cond(training, lambda: tf.contrib.layers.batch_norm(x, is_training=True, scope=name + '_batch_norm'),
             #             lambda: tf.contrib.layers.batch_norm(x, is_training=False, scope=name + '_batch_norm',
             #                                                  reuse=True))
-            x = tf.keras.layers.BatchNormalization(name=name + '_batch_norm')(x, training)
+            x = tf.layers.batch_normalization(x, training=training, name=name + '_batch_norm')
         return x
 
     def conv_layer(self, x, training, filters, name):
@@ -63,7 +63,7 @@ class DenseTiramisu(object):
                                  activation=None,
                                  kernel_initializer=tf.contrib.layers.variance_scaling_initializer(),
                                  name=name + '_conv3x3')
-            x = tf.layers.dropout(x, rate=0.2, training=training, name=name + '_dropout')
+            x = tf.layers.dropout(x, rate=0., training=training, name=name + '_dropout')
 
         return x
 
@@ -114,7 +114,7 @@ class DenseTiramisu(object):
                                  activation=None,
                                  kernel_initializer=tf.contrib.layers.variance_scaling_initializer(),
                                  name=name + '_conv1x1')
-            x = tf.layers.dropout(x, rate=0.2, training=training, name=name + '_dropout')
+            x = tf.layers.dropout(x, rate=0., training=training, name=name + '_dropout')
             x = tf.nn.max_pool(x, [1, 2, 2, 1], [1, 2, 2, 1], padding='SAME', name=name + '_maxpool2x2')
 
         return x
@@ -151,6 +151,7 @@ class DenseTiramisu(object):
         Returns:
             x: Tensor, raw unscaled logits of predicted segmentation.
         """
+        print(training)
         concats = []
         with tf.variable_scope('encoder'):
             x = tf.layers.conv2d(x,
