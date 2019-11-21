@@ -19,6 +19,8 @@ LABELED_DATA_FOLDER = 'MICCAI_BraTS_2019_Data_Training'
 
 FLAGS = flags.FLAGS
 
+os.environ['KMP_AFFINITY'] = 'disabled'
+
 
 def download_brats19():
     # TODO
