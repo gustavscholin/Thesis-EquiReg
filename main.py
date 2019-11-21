@@ -361,9 +361,9 @@ def get_model_fn():
             total_loss += FLAGS.unsup_coeff * avg_unsup_loss
             metric_dict["unsup/loss"] = avg_unsup_loss
 
-        total_loss = utils.decay_weights(
-            total_loss,
-            FLAGS.weight_decay_rate)
+        #total_loss = utils.decay_weights(
+        #    total_loss,
+        #    FLAGS.weight_decay_rate)
 
         #### Check model parameters
         num_params = sum([np.prod(v.shape) for v in tf.trainable_variables()])
