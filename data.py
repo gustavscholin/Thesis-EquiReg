@@ -88,7 +88,11 @@ def get_dataset(type, data_dir, record_spec,
     all_file_list = get_file_list(data_dir, split)
     dataset = tf.data.Dataset.from_tensor_slices(all_file_list)
 
-    dataset = tf.data.TFRecordDataset(dataset, num_parallel_reads=4)
+    if not is_training:
+        dataset = tf.data.TFRecordDataset(dataset, num_parallel_reads=1)
+    else:
+        dataset = tf.data.TFRecordDataset(dataset, num_parallel_reads=4)
+        
     dataset = dataset.map(parser, num_parallel_calls=32)
 
     if is_training:
