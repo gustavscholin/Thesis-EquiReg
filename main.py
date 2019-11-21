@@ -290,6 +290,7 @@ def get_model_fn():
             output = {
                 'prediction': predictions,
                 'ground_truth': sup_masks,
+                'images': all_images,
                 "whole_dice": dice_scores['whole'],
                 "core_dice": dice_scores['core'],
                 "enhancing_dice": dice_scores['enhancing']
@@ -578,6 +579,7 @@ def train():
 
         preds = []
         gts = []
+        imgs = []
         w_dice = []
         c_dice = []
         e_dice = []
@@ -591,18 +593,20 @@ def train():
                 tf.logging.info('Predicting: {} examples'.format(example_cnt))
             preds.append(example['prediction'])
             gts.append(example['ground_truth'])
+            imgs.append(example['images'])
             w_dice.append(example['whole_dice'])
             c_dice.append(example['core_dice'])
             e_dice.append(example['enhancing_dice'])
 
         preds = np.stack(preds)
         gts = np.stack(gts)
+        imgs = np.stack(imgs)
         w_dice = np.stack(w_dice)
         c_dice = np.stack(c_dice)
         e_dice = np.stack(e_dice)
 
         np.savez_compressed(os.path.join(FLAGS.model_dir, '{}_prediction'.format(file_name)), predictions=preds,
-                            ground_truths=gts, whole_dice=w_dice, core_dice=c_dice, enhancing_dice=e_dice)
+                            ground_truths=gts, images=imgs, whole_dice=w_dice, core_dice=c_dice, enhancing_dice=e_dice)
 
 
 def main(_):
