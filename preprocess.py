@@ -148,8 +148,7 @@ def preproc_one(path, out_format, split):
     mri_channels, seg_masks = crop(mri_channels, seg_masks, split)
 
     for channel in range(4):
-        # mri_channels[channel] = bias_field_correction(mri_channels[channel])
-        pass
+        mri_channels[channel] = bias_field_correction(mri_channels[channel])
 
     images = sitk.GetArrayFromImage(sitk.Compose(mri_channels))
 
