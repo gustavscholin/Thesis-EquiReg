@@ -16,6 +16,7 @@ EXAMPLE_DATA_PATH = 'data/raw_data/example_data'
 PROCESSED_DATA_PATH = 'data/processed_data'
 
 LABELED_DATA_FOLDER = 'MICCAI_BraTS_2019_Data_Training'
+UNLABELED_DATA_FOLDER = 'MICCAI_BraTS_2019_Data_Validation'
 
 FLAGS = flags.FLAGS
 
@@ -56,61 +57,73 @@ def save_npy(data_list, out_dir, shard_cnt):
         logging.info('Saved {} samples to {}'.format(data.shape[0], out_path))
 
 
-def get_example(images, seg_masks):
+def get_example_list(images, seg_masks):
     example_list = []
-    for image, seg_mask in zip(images, seg_masks):
-        feature = {
-            'image': _float_feature(image.reshape(-1)),
-            'seg_mask': _int_feature(seg_mask.reshape(-1))
-        }
-        example_list.append(tf.train.Example(features=tf.train.Features(feature=feature)))
-
+    if seg_masks is not None:
+        for image, seg_mask in zip(images, seg_masks):
+            feature = {
+                'image': _float_feature(image.reshape(-1)),
+                'seg_mask': _int_feature(seg_mask.reshape(-1))
+            }
+            example_list.append(tf.train.Example(features=tf.train.Features(feature=feature)))
+    else:
+        for image in images:
+            feature = {
+                'image': _float_feature(image.reshape(-1))
+            }
+            example_list.append(tf.train.Example(features=tf.train.Features(feature=feature)))
     return example_list
 
 
 def process_data(data_paths, out_path, split, out_format, nbr_cores=1):
     logging.info('Pre-processing {} data'.format(split))
 
-    partial_preproc_one = partial(preproc_one, out_format=out_format)
+    out_path = os.path.join(out_path, split)
+    if not os.path.exists(out_path):
+        os.makedirs(out_path)
+
+    partial_preproc_one = partial(preproc_one, out_format=out_format, split=split)
 
     pool = Pool(processes=nbr_cores)
     shard_cnt = 0
-    count = 0
+
+    path_list = []
+    nb_slices_list = []
 
     if out_format == 'tfrecord':
         example_lists = []
         file_name = os.path.join(out_path, "{}_data.tfrecord".format(split))
 
-        for example_list in pool.imap(partial_preproc_one, data_paths):
-            example_lists.append(example_list)
-            if len(example_lists) == 5:
+        for sample_dict in pool.imap(partial_preproc_one, data_paths):
+            example_lists.append(sample_dict['example_list'])
+            path_list.append(sample_dict['path'])
+            nb_slices_list.append(sample_dict['nb_slices'])
+
+            if len(example_lists) == 5 or len(data_paths) == len(path_list):
                 examples = list(itertools.chain.from_iterable(example_lists))
                 save_tfrecord(examples, file_name, shard_cnt)
                 shard_cnt += 1
                 example_lists = []
-            count += len(example_list)
-
-        examples = list(itertools.chain.from_iterable(example_lists))
-        save_tfrecord(examples, file_name, shard_cnt)
 
     elif out_format == 'numpy':
         data_list = []
         images_file_path = os.path.join(out_path, '{}_images'.format(split))
         seg_masks_file_path = os.path.join(out_path, '{}_seg_masks'.format(split))
 
-        for sample_tup in pool.imap(partial_preproc_one, data_paths):
-            data_list.append(sample_tup)
-            if len(data_list) == 3:
-                save_npy([data[0] for data in data_list], images_file_path, shard_cnt)
-                save_npy([data[1] for data in data_list], seg_masks_file_path, shard_cnt)
+        for sample_dict in pool.imap(partial_preproc_one, data_paths):
+            data_list.append((sample_dict['images'], sample_dict['seg_masks']))
+            path_list.append(sample_dict['path'])
+            nb_slices_list.append(sample_dict['nb_slices'])
+
+            if len(data_list) == 5 or len(data_paths) == len(path_list):
+                images, seg_masks = zip(*data_list)
+                save_npy(images, images_file_path, shard_cnt)
+                if seg_masks[0] is not None:
+                    save_npy(seg_masks, seg_masks_file_path, shard_cnt)
                 shard_cnt += 1
                 data_list = []
-            count += len(sample_tup[0])
 
-        save_npy([data[0] for data in data_list], images_file_path, shard_cnt)
-        save_npy([data[1] for data in data_list], seg_masks_file_path, shard_cnt)
-
-    return count
+    return path_list, nb_slices_list
 
 
 def get_data_paths(path):
@@ -121,7 +134,7 @@ def get_data_paths(path):
     return sorted(data_paths)
 
 
-def preproc_one(path, out_format):
+def preproc_one(path, out_format, split):
     logging.info('Processing {}'.format(path))
     mri_channels = []
     seg_masks = None
@@ -132,10 +145,11 @@ def preproc_one(path, out_format):
             seg_masks = sitk.GetArrayFromImage(sitk.ReadImage(os.path.join(path, file), sitk.sitkInt64))
             seg_masks[np.where(seg_masks == 4)] = 3  # Moving all class 4 to class 3. Class 3 isn't used in BRATS 2019
 
-    mri_channels, seg_masks = crop(mri_channels, seg_masks)
+    mri_channels, seg_masks = crop(mri_channels, seg_masks, split)
 
     for channel in range(4):
-        mri_channels[channel] = bias_field_correction(mri_channels[channel])
+        # mri_channels[channel] = bias_field_correction(mri_channels[channel])
+        pass
 
     images = sitk.GetArrayFromImage(sitk.Compose(mri_channels))
 
@@ -143,29 +157,41 @@ def preproc_one(path, out_format):
         images[:, :, :, channel] = histogram_equalization(images[:, :, :, channel])
 
     if out_format == 'tfrecord':
-        return get_example(images, seg_masks)
+        return {
+            'example_list': get_example_list(images, seg_masks),
+            'nb_slices': images.shape[0],
+            'path': path
+        }
 
     elif out_format == 'numpy':
-        return images, seg_masks
+        return {
+            'images': images,
+            'seg_masks': seg_masks,
+            'nb_slices': images.shape[0],
+            'path': path
+        }
 
 
-def crop(mri_channels, seg_masks):
-    min_idx = 155
-    max_idx = 0
-    for mri_channel in mri_channels:
-        mask = mri_channel != 0
-        label_shape_filter = sitk.LabelShapeStatisticsImageFilter()
-        label_shape_filter.Execute(mask)
-        bounding_box = label_shape_filter.GetBoundingBox(1)
+def crop(mri_channels, seg_masks, split):
+    if not split == 'test':
+        min_idx = 155
+        max_idx = 0
+        for mri_channel in mri_channels:
+            mask = mri_channel != 0
+            label_shape_filter = sitk.LabelShapeStatisticsImageFilter()
+            label_shape_filter.Execute(mask)
+            bounding_box = label_shape_filter.GetBoundingBox(1)
 
-        if bounding_box[2] < min_idx:
-            min_idx = bounding_box[2]
-        if bounding_box[5] + bounding_box[2] > max_idx:
-            max_idx = bounding_box[5] + bounding_box[2]
+            if bounding_box[2] < min_idx:
+                min_idx = bounding_box[2]
+            if bounding_box[5] + bounding_box[2] > max_idx:
+                max_idx = bounding_box[5] + bounding_box[2]
 
-    # Crop mri and seg-mask to 224x224 to fit tiramisu model
-    return [mri_channel[8:232, 8:232, min_idx:max_idx] for mri_channel in mri_channels], \
-           seg_masks[min_idx:max_idx, 8:232, 8:232]
+        # Crop mri and seg-mask to 224x224 to fit tiramisu model
+        return [mri_channel[8:232, 8:232, min_idx:max_idx] for mri_channel in mri_channels], \
+               seg_masks[min_idx:max_idx, 8:232, 8:232]
+    else:
+        return [mri_channel[8:232, 8:232, :] for mri_channel in mri_channels], None
 
 
 def bias_field_correction(img):
@@ -191,9 +217,10 @@ def histogram_equalization(data):
 
 
 def main(argsv):
-    data_path = os.path.join(FLAGS.in_path, LABELED_DATA_FOLDER)
+    labeled_data_root = os.path.join(FLAGS.in_path, LABELED_DATA_FOLDER)
+    unlabeled_data_root = os.path.join(FLAGS.in_path, UNLABELED_DATA_FOLDER)
 
-    if not os.path.exists(data_path):
+    if not os.path.exists(labeled_data_root):
         logging.fatal('Input data not found')
         sys.exit()
 
@@ -203,28 +230,50 @@ def main(argsv):
         if not os.path.exists(FLAGS.out_path):
             os.makedirs(FLAGS.out_path)
 
-        data_paths = get_data_paths(data_path)
-        random.shuffle(data_paths)
-        nb_train_paths = int(len(data_paths) * FLAGS.train_cut)
-        train_paths = data_paths[:nb_train_paths]
-        val_paths = data_paths[nb_train_paths:]
+        labeled_data_paths = get_data_paths(labeled_data_root)
+        random.shuffle(labeled_data_paths)
+        nb_train_paths = int(len(labeled_data_paths) * FLAGS.train_cut)
+        train_paths = labeled_data_paths[:nb_train_paths]
+        val_paths = labeled_data_paths[nb_train_paths:]
 
-        nbr_train_samples = process_data(train_paths, FLAGS.out_path, split="train",
-                                         out_format=FLAGS.out_format, nbr_cores=FLAGS.nbr_cores)
-        nbr_val_samples = process_data(val_paths, FLAGS.out_path, split="val",
-                                       out_format=FLAGS.out_format, nbr_cores=FLAGS.nbr_cores)
+        test_paths = get_data_paths(unlabeled_data_root)
 
-        data_sizes = {
-            'train_size': nbr_train_samples,
-            'val_size': nbr_val_samples
+        train_paths, train_slices = process_data(train_paths, FLAGS.out_path, split="train",
+                                                 out_format=FLAGS.out_format, nbr_cores=FLAGS.nbr_cores)
+        val_paths, val_slices = process_data(val_paths, FLAGS.out_path, split="val",
+                                             out_format=FLAGS.out_format, nbr_cores=FLAGS.nbr_cores)
+        test_paths, test_slices = process_data(test_paths, FLAGS.out_path, split='test',
+                                               out_format=FLAGS.out_format, nbr_cores=FLAGS.nbr_cores)
+
+        nbr_train_samples = sum(train_slices)
+        nbr_val_samples = sum(val_slices)
+        nbr_test_samples = sum(test_slices)
+
+        data_info = {
+            'train': {
+                'size': nbr_train_samples,
+                'paths': train_paths,
+                'slices': train_slices
+            },
+            'val': {
+                'size': nbr_val_samples,
+                'paths': val_paths,
+                'slices': val_slices
+            },
+            'test': {
+                'size': nbr_test_samples,
+                'paths': test_paths,
+                'slices': test_slices
+            }
         }
-        with open(os.path.join(FLAGS.out_path, 'data_sizes.json'), 'w') as fp:
-            json.dump(data_sizes, fp)
+        with open(os.path.join(FLAGS.out_path, 'data_info.json'), 'w') as fp:
+            json.dump(data_info, fp, indent=4)
 
         logging.info('Pre-processing finished')
 
         logging.info('{} training samples saved to {}'.format(nbr_train_samples, FLAGS.out_path))
         logging.info('{} validation samples saved to {}'.format(nbr_val_samples, FLAGS.out_path))
+        logging.info('{} test samples saved to {}'.format(nbr_test_samples, FLAGS.out_path))
     else:
         logging.info('Preprocessed data already exists')
 
