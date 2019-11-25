@@ -490,8 +490,8 @@ def get_model_fn():
 
 def train():
     # Create input function
-    with tf.gfile.Open(os.path.join(FLAGS.data_dir, 'data_sizes.json'), 'r') as fp:
-        data_sizes = json.load(fp)
+    with tf.gfile.Open(os.path.join(FLAGS.data_dir, 'data_info.json'), 'r') as fp:
+        data_info = json.load(fp)
     if FLAGS.unsup_ratio == 0:
         FLAGS.unsup_cut = 0.0
     # if FLAGS.do_eval_along_training:
@@ -501,7 +501,7 @@ def train():
     train_input_fn = data.get_input_fn(
         data_dir=FLAGS.data_dir,
         split="train",
-        data_sizes=data_sizes,
+        data_info=data_info,
         batch_size=FLAGS.train_batch_size,
         sup_cut=FLAGS.sup_cut,
         unsup_cut=FLAGS.unsup_cut,
@@ -511,7 +511,7 @@ def train():
     eval_input_fn = data.get_input_fn(
         data_dir=FLAGS.data_dir,
         split="val",
-        data_sizes=data_sizes,
+        data_info=data_info,
         batch_size=FLAGS.eval_batch_size,
         sup_cut=1.0,
         unsup_cut=0.0,
@@ -521,13 +521,13 @@ def train():
     pred_input_fn = data.get_input_fn(
         data_dir=FLAGS.data_dir,
         split=FLAGS.pred_dataset,
-        data_sizes=data_sizes,
+        data_info=data_info,
         batch_size=FLAGS.pred_batch_size,
         sup_cut=1.0,
         unsup_cut=0.0,
         unsup_ratio=0
     )
-    # eval_size = data_sizes['val_size']
+    # eval_size = data_info['val_size']
     # eval_steps = eval_size // FLAGS.eval_batch_size
 
     # Get model function
