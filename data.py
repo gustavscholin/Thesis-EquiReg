@@ -33,7 +33,7 @@ FLAGS = flags.FLAGS
 
 def get_file_list(data_dir, split):
     file_prefix = '{}_data.tfrecord'.format(split)
-    file_list = tf.gfile.Glob(os.path.join(data_dir, file_prefix + '*'))
+    file_list = tf.gfile.Glob(os.path.join(data_dir, split, file_prefix + '*'))
     return file_list
 
 
@@ -60,7 +60,8 @@ def get_dataset(type, data_dir, record_spec,
         # reshape image back to 3D shape
         if type == 'sup':
             example['image'] = tf.reshape(example['image'], [224, 224, 4])
-            example['seg_mask'] = tf.reshape(example['seg_mask'], [224, 224])
+            if not split == 'test':
+                example['seg_mask'] = tf.reshape(example['seg_mask'], [224, 224])
             if is_training:
                 image, seg_mask = tf.py_func(sup_aug, [example['image'], example['seg_mask']], (tf.float32, tf.int32))
                 image.set_shape([224, 224, 4])

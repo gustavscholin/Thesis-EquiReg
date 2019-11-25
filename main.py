@@ -31,25 +31,25 @@ from augmenters import unsup_logits_aug
 
 os.environ['KMP_AFFINITY'] = 'disabled'
 
-# TPU related
-flags.DEFINE_string(
-    "master", default=None,
-    help="the TPU address. This should be set when using Cloud TPU")
-flags.DEFINE_string(
-    "tpu", default=None,
-    help="The Cloud TPU to use for training. This should be either the name "
-         "used when creating the Cloud TPU, or a grpc://ip.address.of.tpu:8470 url.")
-flags.DEFINE_string(
-    "gcp_project", default=None,
-    help="Project name for the Cloud TPU-enabled project. If not specified, "
-         "we will attempt to automatically detect the GCE project from metadata.")
-flags.DEFINE_string(
-    "tpu_zone", default=None,
-    help="GCE zone where the Cloud TPU is located in. If not specified, we "
-         "will attempt to automatically detect the GCE project from metadata.")
-flags.DEFINE_bool(
-    "use_tpu", default=False,
-    help="Use TPUs rather than GPU/CPU.")
+# # TPU related
+# flags.DEFINE_string(
+#     "master", default=None,
+#     help="the TPU address. This should be set when using Cloud TPU")
+# flags.DEFINE_string(
+#     "tpu", default=None,
+#     help="The Cloud TPU to use for training. This should be either the name "
+#          "used when creating the Cloud TPU, or a grpc://ip.address.of.tpu:8470 url.")
+# flags.DEFINE_string(
+#     "gcp_project", default=None,
+#     help="Project name for the Cloud TPU-enabled project. If not specified, "
+#          "we will attempt to automatically detect the GCE project from metadata.")
+# flags.DEFINE_string(
+#     "tpu_zone", default=None,
+#     help="GCE zone where the Cloud TPU is located in. If not specified, we "
+#          "will attempt to automatically detect the GCE project from metadata.")
+# flags.DEFINE_bool(
+#     "use_tpu", default=False,
+#     help="Use TPUs rather than GPU/CPU.")
 
 # UDA config:
 flags.DEFINE_float(
@@ -111,6 +111,11 @@ flags.DEFINE_bool(
     'do_predict', default=True,
     help='Whether to run predict.'
 )
+flags.DEFINE_enum(
+    'pred_dataset', default='test',
+    enum_values=['test', 'val'],
+    help='Whether to predict the test or the validation dataset.'
+)
 flags.DEFINE_string(
     'pred_ckpt', default=None,
     help='Checkpoint to run prediction on.'
@@ -126,6 +131,9 @@ flags.DEFINE_integer(
 flags.DEFINE_integer(
     "eval_batch_size", default=8,
     help="Size of evalation batch.")
+flags.DEFINE_integer(
+    "pred_batch_size", default=8,
+    help="Size of prediction batch.")
 flags.DEFINE_integer(
     "train_steps", default=100000,
     help="Total number of training steps.")
@@ -259,7 +267,8 @@ def get_model_fn():
         # tf.keras.backend.set_learning_phase(mode == tf.estimator.ModeKeys.TRAIN)
         # model = DenseNetFCN((224, 224, 4), classes=FLAGS.num_classes)
         model = DenseTiramisu(growth_k=16, layers_per_block=[4, 5, 7, 10, 12, 15], num_classes=FLAGS.num_classes)
-        sup_masks = features['seg_mask']
+        if not (mode == tf.estimator.ModeKeys.PREDICT and FLAGS.pred_dataset == 'test'):
+            sup_masks = features['seg_mask']
 
         #### Configuring the optimizer
         global_step = tf.train.get_global_step()
@@ -281,20 +290,21 @@ def get_model_fn():
         if mode == tf.estimator.ModeKeys.PREDICT:
             predictions = tf.argmax(sup_logits, axis=-1, output_type=tf.int32)
 
-            brats_classes = ['whole', 'core', 'enhancing']
-            dice_scores = {}
-            for brats_class in brats_classes:
-                true, pred = class_convert(sup_masks, predictions, brats_class)
-                dice_scores[brats_class] = dice_coef(true, pred)
+            # brats_classes = ['whole', 'core', 'enhancing']
+            # dice_scores = {}
+            # for brats_class in brats_classes:
+            #     true, pred = class_convert(sup_masks, predictions, brats_class)
+            #     dice_scores[brats_class] = dice_coef(true, pred)
 
             output = {
                 'prediction': predictions,
-                'ground_truth': sup_masks,
-                'images': all_images,
-                "whole_dice": dice_scores['whole'],
-                "core_dice": dice_scores['core'],
-                "enhancing_dice": dice_scores['enhancing']
+                'images': all_images
+                # "whole_dice": dice_scores['whole'],
+                # "core_dice": dice_scores['core'],
+                # "enhancing_dice": dice_scores['enhancing']
             }
+            if FLAGS.pred_dataset == 'val':
+                output['ground_truth'] = sup_masks
 
             return tf.estimator.EstimatorSpec(
                 mode=mode,
@@ -435,8 +445,8 @@ def get_model_fn():
 
         optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
 
-        if FLAGS.use_tpu:
-            optimizer = tf.contrib.tpu.CrossShardOptimizer(optimizer)
+        # if FLAGS.use_tpu:
+        #     optimizer = tf.contrib.tpu.CrossShardOptimizer(optimizer)
 
         grads_and_vars = optimizer.compute_gradients(total_loss)
         gradients, variables = zip(*grads_and_vars)
@@ -484,32 +494,41 @@ def train():
         data_sizes = json.load(fp)
     if FLAGS.unsup_ratio == 0:
         FLAGS.unsup_cut = 0.0
-    if FLAGS.do_eval_along_training:
-        FLAGS.do_train = True
-        FLAGS.do_eval = True
-    if FLAGS.do_train:
-        train_input_fn = data.get_input_fn(
-            data_dir=FLAGS.data_dir,
-            split="train",
-            data_sizes=data_sizes,
-            batch_size=FLAGS.train_batch_size,
-            sup_cut=FLAGS.sup_cut,
-            unsup_cut=FLAGS.unsup_cut,
-            unsup_ratio=FLAGS.unsup_ratio,
-        )
+    # if FLAGS.do_eval_along_training:
+    #     FLAGS.do_train = True
+    #     FLAGS.do_eval = True
 
-    if FLAGS.do_eval or FLAGS.do_predict:
-        eval_input_fn = data.get_input_fn(
-            data_dir=FLAGS.data_dir,
-            split="val",
-            data_sizes=data_sizes,
-            batch_size=FLAGS.eval_batch_size,
-            sup_cut=1.0,
-            unsup_cut=0.0,
-            unsup_ratio=0
-        )
-        eval_size = data_sizes['val_size']
-        eval_steps = eval_size // FLAGS.eval_batch_size
+    train_input_fn = data.get_input_fn(
+        data_dir=FLAGS.data_dir,
+        split="train",
+        data_sizes=data_sizes,
+        batch_size=FLAGS.train_batch_size,
+        sup_cut=FLAGS.sup_cut,
+        unsup_cut=FLAGS.unsup_cut,
+        unsup_ratio=FLAGS.unsup_ratio,
+    )
+
+    eval_input_fn = data.get_input_fn(
+        data_dir=FLAGS.data_dir,
+        split="val",
+        data_sizes=data_sizes,
+        batch_size=FLAGS.eval_batch_size,
+        sup_cut=1.0,
+        unsup_cut=0.0,
+        unsup_ratio=0
+    )
+
+    pred_input_fn = data.get_input_fn(
+        data_dir=FLAGS.data_dir,
+        split=FLAGS.pred_dataset,
+        data_sizes=data_sizes,
+        batch_size=FLAGS.pred_batch_size,
+        sup_cut=1.0,
+        unsup_cut=0.0,
+        unsup_ratio=0
+    )
+    # eval_size = data_sizes['val_size']
+    # eval_steps = eval_size // FLAGS.eval_batch_size
 
     # Get model function
     model_fn = get_model_fn()
@@ -522,18 +541,9 @@ def train():
         tf.logging.info("  Unsupervised batch size = %d",
                         FLAGS.train_batch_size * FLAGS.unsup_ratio)
         tf.logging.info("  Num train steps = %d", FLAGS.train_steps)
-        # curr_step = 0
-        # while True:
-        #     if curr_step >= FLAGS.train_steps:
-        #         break
-        #     tf.logging.info("Current step {}".format(curr_step))
-        #     train_step = min(FLAGS.save_steps, FLAGS.train_steps - curr_step)
-        #     estimator.train(input_fn=train_input_fn, steps=train_step)
-        #     estimator.evaluate(input_fn=eval_input_fn, steps=eval_steps)
-        #     curr_step += FLAGS.save_steps
 
         train_spec = tf.estimator.TrainSpec(input_fn=train_input_fn, max_steps=FLAGS.train_steps)
-        eval_spec = tf.estimator.EvalSpec(input_fn=eval_input_fn, steps=eval_steps,
+        eval_spec = tf.estimator.EvalSpec(input_fn=eval_input_fn,
                                           start_delay_secs=0, throttle_secs=10)
         tf.estimator.train_and_evaluate(estimator, train_spec, eval_spec)
     else:
@@ -545,7 +555,7 @@ def train():
             estimator.train(input_fn=train_input_fn, max_steps=FLAGS.train_steps)
         if FLAGS.do_eval:
             tf.logging.info("***** Running evaluation *****")
-            results = estimator.evaluate(input_fn=eval_input_fn, steps=eval_steps)
+            results = estimator.evaluate(input_fn=eval_input_fn)
             tf.logging.info(">> Results:")
             for key in results.keys():
                 tf.logging.info("  %s = %s", key, str(results[key]))
@@ -561,21 +571,7 @@ def train():
         else:
             file_name = 'latest_ckpt'
             checkpoint_path = None
-        output = estimator.predict(input_fn=eval_input_fn, checkpoint_path=checkpoint_path)
-        # preds = np.zeros((0, 224, 224))
-        # gts = np.zeros((0, 224, 224))
-        # w_dice = np.array([])
-        # c_dice = np.array([])
-        # e_dice = np.array([])
-        # for example in output:
-        #     if not np.any(example['ground_truth']):
-        #         continue
-        #     tf.logging.info('predicting...')
-        #     preds = np.vstack([preds, np.expand_dims(example['prediction'], axis=0)])
-        #     gts = np.vstack([gts, np.expand_dims(example['ground_truth'], axis=0)])
-        #     w_dice = np.append(w_dice, example['whole_dice'])
-        #     c_dice = np.append(c_dice, example['core_dice'])
-        #     e_dice = np.append(e_dice, example['enhancing_dice'])
+        output = estimator.predict(input_fn=pred_input_fn, checkpoint_path=checkpoint_path)
 
         preds = []
         gts = []
@@ -586,17 +582,19 @@ def train():
 
         example_cnt = 0
         for example in output:
-            if not np.any(example['ground_truth']):
-                continue
-            example_cnt += 1
-            if example_cnt % 500 == 0:
-                tf.logging.info('Predicting: {} examples'.format(example_cnt))
+            if FLAGS.pred_dataset == 'val':
+                if not np.any(example['ground_truth']):
+                    continue
+                gts.append(example['ground_truth'])
             preds.append(example['prediction'])
-            gts.append(example['ground_truth'])
             imgs.append(example['images'])
             w_dice.append(example['whole_dice'])
             c_dice.append(example['core_dice'])
             e_dice.append(example['enhancing_dice'])
+
+            example_cnt += 1
+            if example_cnt % 500 == 0:
+                tf.logging.info('Predicting: {} examples'.format(example_cnt))
 
         preds = np.stack(preds)
         gts = np.stack(gts)
