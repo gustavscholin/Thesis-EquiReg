@@ -117,7 +117,7 @@ def get_input_fn(
         unsup_cut=1.0, unsup_ratio=0, shuffle_seed=None):
     def input_fn(params):
 
-        size = data_info[split]['{}_size'.format(split)]
+        size = data_info[split]['size']
         sup_cut_size = int(math.ceil(sup_cut * size))
         unsup_cut_size = int(math.floor(unsup_cut * size))
 
