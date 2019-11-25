@@ -518,7 +518,7 @@ def train():
         unsup_ratio=0
     )
 
-    pred_input_fn = data.get_input_fn(
+    test_input_fn = data.get_input_fn(
         data_dir=FLAGS.data_dir,
         split=FLAGS.pred_dataset,
         data_info=data_info,
@@ -527,8 +527,9 @@ def train():
         unsup_cut=0.0,
         unsup_ratio=0
     )
-    # eval_size = data_info['val_size']
-    # eval_steps = eval_size // FLAGS.eval_batch_size
+
+    eval_size = data_info['val']['size']
+    eval_steps = eval_size // FLAGS.eval_batch_size
 
     # Get model function
     model_fn = get_model_fn()
@@ -543,7 +544,7 @@ def train():
         tf.logging.info("  Num train steps = %d", FLAGS.train_steps)
 
         train_spec = tf.estimator.TrainSpec(input_fn=train_input_fn, max_steps=FLAGS.train_steps)
-        eval_spec = tf.estimator.EvalSpec(input_fn=eval_input_fn,
+        eval_spec = tf.estimator.EvalSpec(input_fn=eval_input_fn, steps=eval_steps,
                                           start_delay_secs=0, throttle_secs=10)
         tf.estimator.train_and_evaluate(estimator, train_spec, eval_spec)
     else:
@@ -555,7 +556,7 @@ def train():
             estimator.train(input_fn=train_input_fn, max_steps=FLAGS.train_steps)
         if FLAGS.do_eval:
             tf.logging.info("***** Running evaluation *****")
-            results = estimator.evaluate(input_fn=eval_input_fn)
+            results = estimator.evaluate(input_fn=eval_input_fn, steps=eval_steps)
             tf.logging.info(">> Results:")
             for key in results.keys():
                 tf.logging.info("  %s = %s", key, str(results[key]))
@@ -571,7 +572,7 @@ def train():
         else:
             file_name = 'latest_ckpt'
             checkpoint_path = None
-        output = estimator.predict(input_fn=pred_input_fn, checkpoint_path=checkpoint_path)
+        output = estimator.predict(input_fn=test_input_fn, checkpoint_path=checkpoint_path)
 
         preds = []
         gts = []
