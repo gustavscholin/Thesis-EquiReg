@@ -1,7 +1,6 @@
 python main.py \
   --do_eval_along_training=True \
-  --do_train=False \
-  --sup_cut=1.0 \
+  --sup_cut=0.1 \
   --unsup_cut=0. \
   --unsup_ratio=0 \
   --shuffle_seed=42 \
@@ -9,4 +8,4 @@ python main.py \
   --train_steps=100000 \
   --max_save=10 \
   --data_dir=data/processed_data \
-  --model_dir=ckpt/100_supervised
+  --model_dir=ckpt/10_supervised
