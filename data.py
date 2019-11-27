@@ -124,9 +124,11 @@ def get_input_fn(
         datasets = []
 
         record_spec = {
-            "image": tf.FixedLenFeature([224 * 224 * 4], tf.float32),
-            "seg_mask": tf.FixedLenFeature([224 * 224], tf.int64)
+            'image': tf.FixedLenFeature([224 * 224 * 4], tf.float32)
         }
+
+        if not split == 'test':
+            record_spec['seg_mask'] = tf.FixedLenFeature([224 * 224], tf.int64)
 
         # Supervised data
         if sup_cut_size > 0:
