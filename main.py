@@ -551,7 +551,7 @@ def train():
             if example_cnt == data_info[FLAGS.pred_dataset]['slices'][patient_cnt]:
                 patient_id = data_info[FLAGS.pred_dataset]['paths'][patient_cnt].split('/')[-1]
                 nii_img = sitk.GetImageFromArray(np.stack(preds))
-                sitk.WriteImage(nii_img, os.path.join(out_path, '{}.nii'.format(patient_id)), True)
+                sitk.WriteImage(nii_img, os.path.join(out_path, '{}.nii.gz'.format(patient_id)), True)
 
                 tf.logging.info('Exported patient {}'.format(patient_id))
                 example_cnt = 1
