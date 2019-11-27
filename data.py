@@ -106,7 +106,7 @@ def get_dataset(type, data_dir, record_spec,
                 dataset = dataset.skip(size - cut_size)
         dataset = dataset.shuffle(buffer_size)
         dataset = dataset.repeat()
-    dataset = dataset.batch(per_core_bsz, drop_remainder=True)
+    dataset = dataset.batch(per_core_bsz, drop_remainder=is_training)
     dataset = dataset.prefetch(1)
 
     return dataset
