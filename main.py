@@ -23,6 +23,7 @@ import numpy as np
 import tensorflow as tf
 import data
 import utils
+import SimpleITK as sitk
 
 from absl import flags
 from models.tiramisu import DenseNetFCN
@@ -30,26 +31,6 @@ from models.tiramisu_tf import DenseTiramisu
 from augmenters import unsup_logits_aug
 
 os.environ['KMP_AFFINITY'] = 'disabled'
-
-# # TPU related
-# flags.DEFINE_string(
-#     "master", default=None,
-#     help="the TPU address. This should be set when using Cloud TPU")
-# flags.DEFINE_string(
-#     "tpu", default=None,
-#     help="The Cloud TPU to use for training. This should be either the name "
-#          "used when creating the Cloud TPU, or a grpc://ip.address.of.tpu:8470 url.")
-# flags.DEFINE_string(
-#     "gcp_project", default=None,
-#     help="Project name for the Cloud TPU-enabled project. If not specified, "
-#          "we will attempt to automatically detect the GCE project from metadata.")
-# flags.DEFINE_string(
-#     "tpu_zone", default=None,
-#     help="GCE zone where the Cloud TPU is located in. If not specified, we "
-#          "will attempt to automatically detect the GCE project from metadata.")
-# flags.DEFINE_bool(
-#     "use_tpu", default=False,
-#     help="Use TPUs rather than GPU/CPU.")
 
 # UDA config:
 flags.DEFINE_float(
@@ -267,8 +248,7 @@ def get_model_fn():
         # tf.keras.backend.set_learning_phase(mode == tf.estimator.ModeKeys.TRAIN)
         # model = DenseNetFCN((224, 224, 4), classes=FLAGS.num_classes)
         model = DenseTiramisu(growth_k=16, layers_per_block=[4, 5, 7, 10, 12, 15], num_classes=FLAGS.num_classes)
-        if not (mode == tf.estimator.ModeKeys.PREDICT and FLAGS.pred_dataset == 'test'):
-            sup_masks = features['seg_mask']
+        # if not (mode == tf.estimator.ModeKeys.PREDICT and FLAGS.pred_dataset == 'test'):
 
         #### Configuring the optimizer
         global_step = tf.train.get_global_step()
@@ -289,22 +269,9 @@ def get_model_fn():
 
         if mode == tf.estimator.ModeKeys.PREDICT:
             predictions = tf.argmax(sup_logits, axis=-1, output_type=tf.int32)
-
-            # brats_classes = ['whole', 'core', 'enhancing']
-            # dice_scores = {}
-            # for brats_class in brats_classes:
-            #     true, pred = class_convert(sup_masks, predictions, brats_class)
-            #     dice_scores[brats_class] = dice_coef(true, pred)
-
             output = {
                 'prediction': predictions,
-                'images': all_images
-                # "whole_dice": dice_scores['whole'],
-                # "core_dice": dice_scores['core'],
-                # "enhancing_dice": dice_scores['enhancing']
             }
-            if FLAGS.pred_dataset == 'val':
-                output['ground_truth'] = sup_masks
 
             return tf.estimator.EstimatorSpec(
                 mode=mode,
@@ -313,6 +280,7 @@ def get_model_fn():
                     'output': tf.estimator.export.PredictOutput(output)
                 })
 
+        sup_masks = features['seg_mask']
         sup_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(
             labels=sup_masks,
             logits=sup_logits)
@@ -445,9 +413,6 @@ def get_model_fn():
 
         optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
 
-        # if FLAGS.use_tpu:
-        #     optimizer = tf.contrib.tpu.CrossShardOptimizer(optimizer)
-
         grads_and_vars = optimizer.compute_gradients(total_loss)
         gradients, variables = zip(*grads_and_vars)
         update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
@@ -494,9 +459,6 @@ def train():
         data_info = json.load(fp)
     if FLAGS.unsup_ratio == 0:
         FLAGS.unsup_cut = 0.0
-    # if FLAGS.do_eval_along_training:
-    #     FLAGS.do_train = True
-    #     FLAGS.do_eval = True
 
     train_input_fn = data.get_input_fn(
         data_dir=FLAGS.data_dir,
@@ -565,6 +527,7 @@ def train():
             with tf.gfile.Open("{}/results.txt".format(FLAGS.model_dir), "w") as ouf:
                 ouf.write(str(acc))
     if FLAGS.do_predict:
+
         tf.logging.info('***** Running prediction *****')
         if FLAGS.pred_ckpt:
             file_name = FLAGS.pred_ckpt
@@ -574,41 +537,28 @@ def train():
             checkpoint_path = None
         output = estimator.predict(input_fn=test_input_fn, checkpoint_path=checkpoint_path)
 
+        out_path = os.path.join(FLAGS.model_dir, '{}_{}_prediction'.format(file_name, FLAGS.pred_dataset))
+        if not os.path.exists(out_path):
+            os.makedirs(out_path)
+
         preds = []
-        gts = []
-        imgs = []
-        # w_dice = []
-        # c_dice = []
-        # e_dice = []
 
-        example_cnt = 0
+        example_cnt = 1
+        patient_cnt = 0
         for example in output:
-            if FLAGS.pred_dataset == 'val':
-                if not np.any(example['ground_truth']):
-                    continue
-                gts.append(example['ground_truth'])
-            preds.append(example['prediction'])
-            imgs.append(example['images'])
-            # w_dice.append(example['whole_dice'])
-            # c_dice.append(example['core_dice'])
-            # e_dice.append(example['enhancing_dice'])
+            preds.append(np.pad(example['prediction'], ((8, 8), (8, 8))))
 
-            example_cnt += 1
-            if example_cnt % 500 == 0:
-                tf.logging.info('Predicting: {} examples'.format(example_cnt))
+            if example_cnt == data_info[FLAGS.pred_dataset]['slices'][patient_cnt]:
+                patient_id = data_info[FLAGS.pred_dataset]['paths'][patient_cnt].split('/')[-1]
+                nii_img = sitk.GetImageFromArray(np.stack(preds))
+                sitk.WriteImage(nii_img, os.path.join(out_path, '{}.nii'.format(patient_id)), True)
 
-        preds = np.stack(preds)
-        gts = np.stack(gts)
-        imgs = np.stack(imgs)
-        # w_dice = np.stack(w_dice)
-        # c_dice = np.stack(c_dice)
-        # e_dice = np.stack(e_dice)
-
-        # np.savez_compressed(os.path.join(FLAGS.model_dir, '{}_prediction'.format(file_name)), predictions=preds,
-        #                     ground_truths=gts, images=imgs, whole_dice=w_dice, core_dice=c_dice, enhancing_dice=e_dice)
-
-        np.savez_compressed(os.path.join(FLAGS.model_dir, '{}_prediction'.format(file_name)), predictions=preds,
-                            ground_truths=gts, images=imgs)
+                tf.logging.info('Exported patient {}'.format(patient_id))
+                example_cnt = 1
+                patient_cnt += 1
+                preds = []
+            else:
+                example_cnt += 1
 
 
 def main(_):
@@ -617,24 +567,6 @@ def main(_):
         flags_dict = tf.app.flags.FLAGS.flag_values_dict()
         with tf.gfile.Open(os.path.join(FLAGS.model_dir, "FLAGS.json"), "w") as ouf:
             json.dump(flags_dict, ouf)
-    # hparams = tf.contrib.training.HParams()
-
-    # if FLAGS.model_name == "wrn":
-    #     hparams.add_hparam("model_name", "wrn")
-    #     hparams.add_hparam("wrn_size", FLAGS.wrn_size)
-    # elif FLAGS.model_name == "shake_shake_32":
-    #     hparams.add_hparam("model_name", "shake_shake")
-    #     hparams.add_hparam("shake_shake_widen_factor", 2)
-    # elif FLAGS.model_name == "shake_shake_96":
-    #     hparams.add_hparam("model_name", "shake_shake")
-    #     hparams.add_hparam("shake_shake_widen_factor", 6)
-    # elif FLAGS.model_name == "shake_shake_112":
-    #     hparams.add_hparam("model_name", "shake_shake")
-    #     hparams.add_hparam("shake_shake_widen_factor", 7)
-    # elif FLAGS.model_name == "pyramid_net":
-    #     hparams.add_hparam("model_name", "pyramid_net")
-    # else:
-    #     raise ValueError("Not Valid Model Name: %s" % FLAGS.model_name)
 
     train()
 
