@@ -577,9 +577,9 @@ def train():
         preds = []
         gts = []
         imgs = []
-        w_dice = []
-        c_dice = []
-        e_dice = []
+        # w_dice = []
+        # c_dice = []
+        # e_dice = []
 
         example_cnt = 0
         for example in output:
@@ -589,9 +589,9 @@ def train():
                 gts.append(example['ground_truth'])
             preds.append(example['prediction'])
             imgs.append(example['images'])
-            w_dice.append(example['whole_dice'])
-            c_dice.append(example['core_dice'])
-            e_dice.append(example['enhancing_dice'])
+            # w_dice.append(example['whole_dice'])
+            # c_dice.append(example['core_dice'])
+            # e_dice.append(example['enhancing_dice'])
 
             example_cnt += 1
             if example_cnt % 500 == 0:
@@ -600,12 +600,15 @@ def train():
         preds = np.stack(preds)
         gts = np.stack(gts)
         imgs = np.stack(imgs)
-        w_dice = np.stack(w_dice)
-        c_dice = np.stack(c_dice)
-        e_dice = np.stack(e_dice)
+        # w_dice = np.stack(w_dice)
+        # c_dice = np.stack(c_dice)
+        # e_dice = np.stack(e_dice)
+
+        # np.savez_compressed(os.path.join(FLAGS.model_dir, '{}_prediction'.format(file_name)), predictions=preds,
+        #                     ground_truths=gts, images=imgs, whole_dice=w_dice, core_dice=c_dice, enhancing_dice=e_dice)
 
         np.savez_compressed(os.path.join(FLAGS.model_dir, '{}_prediction'.format(file_name)), predictions=preds,
-                            ground_truths=gts, images=imgs, whole_dice=w_dice, core_dice=c_dice, enhancing_dice=e_dice)
+                            ground_truths=gts, images=imgs)
 
 
 def main(_):
