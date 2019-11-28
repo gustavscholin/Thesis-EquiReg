@@ -546,7 +546,9 @@ def train():
         example_cnt = 1
         patient_cnt = 0
         for example in output:
-            preds.append(np.pad(example['prediction'], ((8, 8), (8, 8))))
+            prediction = example['prediction']
+            prediction[np.where(prediction == 3)] = 4
+            preds.append(np.pad(prediction, ((8, 8), (8, 8))))
 
             if example_cnt == data_info[FLAGS.pred_dataset]['slices'][patient_cnt]:
                 patient_id = data_info[FLAGS.pred_dataset]['paths'][patient_cnt].split('/')[-1]
