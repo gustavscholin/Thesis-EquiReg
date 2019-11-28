@@ -24,6 +24,7 @@ import math
 import os
 import absl.logging as _logging  # pylint: disable=unused-import
 import tensorflow as tf
+import re
 
 from absl import flags
 from augmenters import unsup_img_aug, sup_aug
@@ -31,9 +32,15 @@ from augmenters import unsup_img_aug, sup_aug
 FLAGS = flags.FLAGS
 
 
+def natural_sort(l):
+    convert = lambda text: int(text) if text.isdigit() else text
+    num_key = lambda key: [convert(c) for c in re.split('([0-9]+)', key)]
+    return sorted(l, key=num_key)
+
+
 def get_file_list(data_dir, split):
     file_prefix = '{}_data.tfrecord'.format(split)
-    file_list = tf.gfile.Glob(os.path.join(data_dir, split, file_prefix + '*'))
+    file_list = natural_sort(tf.gfile.Glob(os.path.join(data_dir, split, file_prefix + '*')))
     return file_list
 
 
