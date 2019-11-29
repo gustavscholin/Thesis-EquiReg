@@ -552,7 +552,13 @@ def train():
 
             if example_cnt == data_info[FLAGS.pred_dataset]['slices'][patient_cnt]:
                 patient_id = data_info[FLAGS.pred_dataset]['paths'][patient_cnt].split('/')[-1]
-                nii_img = sitk.GetImageFromArray(np.stack(preds))
+
+                # Make the prediction dims (155,240,240) again for BRATS evaluation
+                below_padding = np.zeros((data_info[FLAGS.pred_dataset]['crop_idx'][patient_cnt][0], 240, 240))
+                above_padding = np.zeros((155 - data_info[FLAGS.pred_dataset]['crop_idx'][patient_cnt][1], 240, 240))
+                fill_dim_img = np.concatenate([below_padding, np.stack(preds), above_padding])
+                
+                nii_img = sitk.GetImageFromArray(fill_dim_img)
                 sitk.WriteImage(nii_img, os.path.join(out_path, '{}.nii.gz'.format(patient_id)))
 
                 tf.logging.info('Exported patient {}'.format(patient_id))
