@@ -99,7 +99,7 @@ def process_data(data_paths, out_path, split, out_format, nbr_cores=1):
             path_list.append(sample_dict['path'])
             nb_slices_list.append(sample_dict['nb_slices'])
 
-            if len(example_lists) == 5 or len(data_paths) == len(path_list):
+            if len(example_lists) == FLAGS.nb_patients_per_file or len(data_paths) == len(path_list):
                 examples = list(itertools.chain.from_iterable(example_lists))
                 save_tfrecord(examples, file_name, shard_cnt)
                 shard_cnt += 1
@@ -115,7 +115,7 @@ def process_data(data_paths, out_path, split, out_format, nbr_cores=1):
             path_list.append(sample_dict['path'])
             nb_slices_list.append(sample_dict['nb_slices'])
 
-            if len(data_list) == 5 or len(data_paths) == len(path_list):
+            if len(data_list) == FLAGS.nb_patients_per_file or len(data_paths) == len(path_list):
                 images, seg_masks = zip(*data_list)
                 save_npy(images, images_file_path, shard_cnt)
                 if seg_masks[0] is not None:
@@ -299,6 +299,10 @@ if __name__ == '__main__':
         'train_cut', default=0.8, lower_bound=0., upper_bound=1.,
         help='Part of the labeled data that should be used for training, '
              'the rest is used for validation'
+    )
+    flags.DEFINE_integer(
+        'nb_patients_per_file', default=1,
+        help='Number of patients exported to each tfrecord or numpy file'
     )
 
     logging.set_verbosity(logging.INFO)
