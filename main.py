@@ -340,7 +340,7 @@ def get_model_fn():
             total_loss += FLAGS.unsup_coeff * avg_unsup_loss
             metric_dict["unsup/loss"] = avg_unsup_loss
 
-        #total_loss = utils.decay_weights(
+        # total_loss = utils.decay_weights(
         #    total_loss,
         #    FLAGS.weight_decay_rate)
 
@@ -505,8 +505,18 @@ def train():
                         FLAGS.train_batch_size * FLAGS.unsup_ratio)
         tf.logging.info("  Num train steps = %d", FLAGS.train_steps)
 
-        train_spec = tf.estimator.TrainSpec(input_fn=train_input_fn, max_steps=FLAGS.train_steps)
-        eval_spec = tf.estimator.EvalSpec(input_fn=eval_input_fn, steps=eval_steps,
+        serving_input_receiver_fn = tf.estimator.export.build_raw_serving_input_receiver_fn(
+            {'images': tf.placeholder(tf.float32, [None, 224, 224, 4], name='input_images')})
+        exporter = tf.estimator.BestExporter(
+            name="best_exporter",
+            serving_input_receiver_fn=serving_input_receiver_fn,
+            exports_to_keep=3)
+
+        # Hook to stop training if loss does not decrease in over 10000 steps.
+        stop_hook = tf.estimator.experimental.stop_if_no_decrease_hook(estimator, "loss", 10000)
+
+        train_spec = tf.estimator.TrainSpec(input_fn=train_input_fn, max_steps=FLAGS.train_steps, hooks=[stop_hook])
+        eval_spec = tf.estimator.EvalSpec(input_fn=eval_input_fn, steps=eval_steps, exporters=exporter,
                                           start_delay_secs=0, throttle_secs=10)
         tf.estimator.train_and_evaluate(estimator, train_spec, eval_spec)
     else:
@@ -557,7 +567,7 @@ def train():
                 below_padding = np.zeros((data_info[FLAGS.pred_dataset]['crop_idx'][patient_cnt][0], 240, 240))
                 above_padding = np.zeros((155 - data_info[FLAGS.pred_dataset]['crop_idx'][patient_cnt][1], 240, 240))
                 fill_dim_img = np.concatenate([below_padding, np.stack(preds), above_padding])
-                
+
                 nii_img = sitk.GetImageFromArray(fill_dim_img)
                 sitk.WriteImage(nii_img, os.path.join(out_path, '{}.nii.gz'.format(patient_id)))
 
