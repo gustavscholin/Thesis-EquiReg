@@ -506,7 +506,7 @@ def train():
         tf.logging.info("  Num train steps = %d", FLAGS.train_steps)
 
         serving_input_receiver_fn = tf.estimator.export.build_raw_serving_input_receiver_fn(
-            {'images': tf.placeholder(tf.float32, [None, 224, 224, 4], name='input_images')})
+            {'image': tf.placeholder(tf.float32, [None, 224, 224, 4], name='input_images')})
         exporter = tf.estimator.BestExporter(
             name="best_exporter",
             serving_input_receiver_fn=serving_input_receiver_fn,

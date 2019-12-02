@@ -8,4 +8,4 @@ python main.py \
   --train_steps=100000 \
   --max_save=10 \
   --data_dir=data/processed_data \
-  --model_dir=ckpt/5_supervised
+  --model_dir=ckpt/1_supervised
