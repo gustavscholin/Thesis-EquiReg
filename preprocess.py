@@ -89,6 +89,7 @@ def process_data(data_paths, out_path, split, out_format, nbr_cores=1):
 
     path_list = []
     nb_slices_list = []
+    crop_idx_list = []
 
     if out_format == 'tfrecord':
         example_lists = []
@@ -98,6 +99,7 @@ def process_data(data_paths, out_path, split, out_format, nbr_cores=1):
             example_lists.append(sample_dict['example_list'])
             path_list.append(sample_dict['path'])
             nb_slices_list.append(sample_dict['nb_slices'])
+            crop_idx_list.append(sample_dict['crop_idx'])
 
             if len(example_lists) == FLAGS.nb_patients_per_file or len(data_paths) == len(path_list):
                 examples = list(itertools.chain.from_iterable(example_lists))
@@ -114,6 +116,7 @@ def process_data(data_paths, out_path, split, out_format, nbr_cores=1):
             data_list.append((sample_dict['images'], sample_dict['seg_masks']))
             path_list.append(sample_dict['path'])
             nb_slices_list.append(sample_dict['nb_slices'])
+            crop_idx_list.append(sample_dict['crop_idx'])
 
             if len(data_list) == FLAGS.nb_patients_per_file or len(data_paths) == len(path_list):
                 images, seg_masks = zip(*data_list)
@@ -123,7 +126,7 @@ def process_data(data_paths, out_path, split, out_format, nbr_cores=1):
                 shard_cnt += 1
                 data_list = []
 
-    return path_list, nb_slices_list
+    return path_list, nb_slices_list, crop_idx_list
 
 
 def get_data_paths(path):
@@ -145,10 +148,11 @@ def preproc_one(path, out_format, split):
             seg_masks = sitk.GetArrayFromImage(sitk.ReadImage(os.path.join(path, file), sitk.sitkInt64))
             seg_masks[np.where(seg_masks == 4)] = 3  # Moving all class 4 to class 3. Class 3 isn't used in BRATS 2019
 
-    mri_channels, seg_masks = crop(mri_channels, seg_masks, split)
+    mri_channels, seg_masks, crop_idx = crop(mri_channels, seg_masks, split)
 
     for channel in range(4):
-        mri_channels[channel] = bias_field_correction(mri_channels[channel])
+        # mri_channels[channel] = bias_field_correction(mri_channels[channel])
+        pass
 
     images = sitk.GetArrayFromImage(sitk.Compose(mri_channels))
 
@@ -159,7 +163,8 @@ def preproc_one(path, out_format, split):
         return {
             'example_list': get_example_list(images, seg_masks),
             'nb_slices': images.shape[0],
-            'path': path
+            'path': path,
+            'crop_idx': crop_idx
         }
 
     elif out_format == 'numpy':
@@ -167,7 +172,8 @@ def preproc_one(path, out_format, split):
             'images': images,
             'seg_masks': seg_masks,
             'nb_slices': images.shape[0],
-            'path': path
+            'path': path,
+            'crop_idx': crop_idx
         }
 
 
@@ -188,9 +194,9 @@ def crop(mri_channels, seg_masks, split):
 
         # Crop mri and seg-mask to 224x224 to fit tiramisu model
         return [mri_channel[8:232, 8:232, min_idx:max_idx] for mri_channel in mri_channels], \
-               seg_masks[min_idx:max_idx, 8:232, 8:232]
+               seg_masks[min_idx:max_idx, 8:232, 8:232], (min_idx, max_idx)
     else:
-        return [mri_channel[8:232, 8:232, :] for mri_channel in mri_channels], None
+        return [mri_channel[8:232, 8:232, :] for mri_channel in mri_channels], None, (0, 155)
 
 
 def bias_field_correction(img):
@@ -237,12 +243,12 @@ def main(argsv):
 
         test_paths = get_data_paths(unlabeled_data_root)
 
-        train_paths, train_slices = process_data(train_paths, FLAGS.out_path, split="train",
-                                                 out_format=FLAGS.out_format, nbr_cores=FLAGS.nbr_cores)
-        val_paths, val_slices = process_data(val_paths, FLAGS.out_path, split="val",
-                                             out_format=FLAGS.out_format, nbr_cores=FLAGS.nbr_cores)
-        test_paths, test_slices = process_data(test_paths, FLAGS.out_path, split='test',
-                                               out_format=FLAGS.out_format, nbr_cores=FLAGS.nbr_cores)
+        train_paths, train_slices, train_crops = process_data(train_paths, FLAGS.out_path, split="train",
+                                                              out_format=FLAGS.out_format, nbr_cores=FLAGS.nbr_cores)
+        val_paths, val_slices, val_crops = process_data(val_paths, FLAGS.out_path, split="val",
+                                                        out_format=FLAGS.out_format, nbr_cores=FLAGS.nbr_cores)
+        test_paths, test_slices, test_crops = process_data(test_paths, FLAGS.out_path, split='test',
+                                                           out_format=FLAGS.out_format, nbr_cores=FLAGS.nbr_cores)
 
         nbr_train_samples = sum(train_slices)
         nbr_val_samples = sum(val_slices)
@@ -252,17 +258,20 @@ def main(argsv):
             'train': {
                 'size': nbr_train_samples,
                 'paths': train_paths,
-                'slices': train_slices
+                'slices': train_slices,
+                'crop_idx': train_crops
             },
             'val': {
                 'size': nbr_val_samples,
                 'paths': val_paths,
-                'slices': val_slices
+                'slices': val_slices,
+                'crop_idx': val_crops
             },
             'test': {
                 'size': nbr_test_samples,
                 'paths': test_paths,
-                'slices': test_slices
+                'slices': test_slices,
+                'crop_idx': test_crops
             }
         }
         with open(os.path.join(FLAGS.out_path, 'data_info.json'), 'w') as fp:
