@@ -58,7 +58,7 @@ def _postprocess_example(example):
 
 
 def get_dataset(type, data_dir, record_spec,
-                split, per_core_bsz, size, cut_size, seed):
+                split, per_core_bsz, size, cut, seed):
     is_training = (split == "train")
 
     def parser(record):
@@ -96,7 +96,13 @@ def get_dataset(type, data_dir, record_spec,
         return example
 
     all_file_list = get_file_list(data_dir, split)
-    dataset = tf.data.Dataset.from_tensor_slices(all_file_list)
+    if is_training:
+        random.Random(seed).shuffle(all_file_list)
+    if type == 'sup':
+        cut_file_list = all_file_list[:math.ceil(len(all_file_list) * cut)]
+    else:
+        cut_file_list = all_file_list[-math.floor(len(all_file_list) * cut):]
+    dataset = tf.data.Dataset.from_tensor_slices(cut_file_list)
 
     if not is_training:
         dataset = tf.data.TFRecordDataset(dataset, num_parallel_reads=1)
@@ -106,15 +112,16 @@ def get_dataset(type, data_dir, record_spec,
     dataset = dataset.map(parser, num_parallel_calls=32)
 
     if is_training:
-        whole_buffer_size = int(size * 0.1)
-        cut_buffer_size = cut_size if cut_size <= whole_buffer_size else whole_buffer_size
-        if cut_size < size:
-            dataset = dataset.shuffle(whole_buffer_size, seed)
-            if type == 'sup':
-                dataset = dataset.take(cut_size)
-            else:
-                dataset = dataset.skip(size - cut_size)
-        dataset = dataset.shuffle(cut_buffer_size)
+        buffer_size = int(size * (len(cut_file_list) / len(all_file_list)))
+        if buffer_size > 3500:
+            buffer_size = 3500
+        # if cut_size < size:
+        #     dataset = dataset.shuffle(whole_buffer_size, seed)
+        #     if type == 'sup':
+        #         dataset = dataset.take(cut_size)
+        #     else:
+        #         dataset = dataset.skip(size - cut_size)
+        dataset = dataset.shuffle(buffer_size)
         dataset = dataset.repeat()
     dataset = dataset.batch(per_core_bsz, drop_remainder=is_training)
     dataset = dataset.prefetch(1)
@@ -141,7 +148,7 @@ def get_input_fn(
             record_spec['seg_mask'] = tf.FixedLenFeature([224 * 224], tf.int64)
 
         # Supervised data
-        if sup_cut_size > 0:
+        if sup_cut > 0:
             sup_dataset = get_dataset(
                 type='sup',
                 data_dir=data_dir,
@@ -149,12 +156,12 @@ def get_input_fn(
                 split=split,
                 per_core_bsz=batch_size,
                 size=size,
-                cut_size=sup_cut_size,
+                cut=sup_cut,
                 seed=shuffle_seed
             )
             datasets.append(sup_dataset)
 
-        if unsup_cut_size > 0 and unsup_ratio > 0:
+        if unsup_cut > 0 and unsup_ratio > 0:
             aug_dataset = get_dataset(
                 type='unsup',
                 data_dir=data_dir,
@@ -162,7 +169,7 @@ def get_input_fn(
                 split=split,
                 per_core_bsz=batch_size * unsup_ratio,
                 size=size,
-                cut_size=unsup_cut_size,
+                cut=unsup_cut,
                 seed=shuffle_seed
             )
             datasets.append(aug_dataset)
