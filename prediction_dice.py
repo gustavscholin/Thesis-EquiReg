@@ -66,6 +66,6 @@ def calc_and_export_dice(pred_data_path):
     print('Enhancing Dice: {}'.format(np.mean(list(dice_enhancing.values()))))
 
 
-experiment_name = '100_supervised_1'
-pred_data_path = os.path.join('data/predictions', experiment_name, 'latest_ckpt_val_prediction')
-calc_and_export_dice(pred_data_path)
+# experiment_name = '100_supervised_1'
+# pred_data_path = os.path.join('data/predictions', experiment_name, 'latest_ckpt_val_prediction')
+# calc_and_export_dice(pred_data_path)
