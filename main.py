@@ -17,6 +17,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import glob
 import os
 import json
 import numpy as np
@@ -24,6 +25,7 @@ import tensorflow as tf
 import data
 import utils
 import SimpleITK as sitk
+import matplotlib.pyplot as plt
 
 from absl import flags
 from models.tiramisu import DenseNetFCN
@@ -93,7 +95,7 @@ flags.DEFINE_bool(
     help='Whether to run predict.'
 )
 flags.DEFINE_enum(
-    'pred_dataset', default='test',
+    'pred_dataset', default='val',
     enum_values=['test', 'val'],
     help='Whether to predict the test or the validation dataset.'
 )
@@ -537,46 +539,53 @@ def train():
             with tf.gfile.Open("{}/results.txt".format(FLAGS.model_dir), "w") as ouf:
                 ouf.write(str(acc))
     if FLAGS.do_predict:
+        tf.enable_eager_execution()
 
         tf.logging.info('***** Running prediction *****')
-        if FLAGS.pred_ckpt:
-            file_name = FLAGS.pred_ckpt
-            checkpoint_path = os.path.join(FLAGS.model_dir, FLAGS.pred_ckpt)
-        else:
-            file_name = 'latest_ckpt'
-            checkpoint_path = None
-        output = estimator.predict(input_fn=test_input_fn, checkpoint_path=checkpoint_path)
 
-        out_path = os.path.join(FLAGS.model_dir, '{}_{}_prediction'.format(file_name, FLAGS.pred_dataset))
+        out_path = os.path.join(FLAGS.model_dir, 'best_{}_prediction'.format(FLAGS.pred_dataset))
         if not os.path.exists(out_path):
             os.makedirs(out_path)
+
+        best_export_dir = sorted(glob.glob(os.path.join(FLAGS.model_dir, 'export/best_exporter/*')))[-1]
+
+        model = tf.saved_model.load_v2(best_export_dir)
+        predict = model.signatures["serving_default"]
+
+        dataset = test_input_fn()
+        iterator = dataset.make_one_shot_iterator()
 
         preds = []
 
         example_cnt = 1
         patient_cnt = 0
-        for example in output:
-            prediction = example['prediction']
-            prediction[np.where(prediction == 3)] = 4
-            preds.append(np.pad(prediction, ((8, 8), (8, 8))))
 
-            if example_cnt == data_info[FLAGS.pred_dataset]['slices'][patient_cnt]:
-                patient_id = data_info[FLAGS.pred_dataset]['paths'][patient_cnt].split('/')[-1]
+        for sample in iterator:
+            prediction_batch = predict(image=sample['image'])['prediction'].numpy()
+            for i in range(prediction_batch.shape[0]):
+                prediction = prediction_batch[i, ...]
 
-                # Make the prediction dims (155,240,240) again for BRATS evaluation
-                below_padding = np.zeros((data_info[FLAGS.pred_dataset]['crop_idx'][patient_cnt][0], 240, 240))
-                above_padding = np.zeros((155 - data_info[FLAGS.pred_dataset]['crop_idx'][patient_cnt][1], 240, 240))
-                fill_dim_img = np.concatenate([below_padding, np.stack(preds), above_padding])
+                prediction[np.where(prediction == 3)] = 4
+                preds.append(np.pad(prediction, ((8, 8), (8, 8))))
 
-                nii_img = sitk.GetImageFromArray(fill_dim_img)
-                sitk.WriteImage(nii_img, os.path.join(out_path, '{}.nii.gz'.format(patient_id)))
+                if example_cnt == data_info[FLAGS.pred_dataset]['slices'][patient_cnt]:
+                    patient_id = data_info[FLAGS.pred_dataset]['paths'][patient_cnt].split('/')[-1]
 
-                tf.logging.info('Exported patient {}'.format(patient_id))
-                example_cnt = 1
-                patient_cnt += 1
-                preds = []
-            else:
-                example_cnt += 1
+                    # Make the prediction dims (155,240,240) again for BRATS evaluation
+                    below_padding = np.zeros((data_info[FLAGS.pred_dataset]['crop_idx'][patient_cnt][0], 240, 240))
+                    above_padding = np.zeros(
+                        (155 - data_info[FLAGS.pred_dataset]['crop_idx'][patient_cnt][1], 240, 240))
+                    fill_dim_img = np.concatenate([below_padding, np.stack(preds), above_padding])
+
+                    nii_img = sitk.GetImageFromArray(fill_dim_img)
+                    sitk.WriteImage(nii_img, os.path.join(out_path, '{}.nii.gz'.format(patient_id)))
+
+                    tf.logging.info('Exported patient {}'.format(patient_id))
+                    example_cnt = 1
+                    patient_cnt += 1
+                    preds = []
+                else:
+                    example_cnt += 1
 
 
 def main(_):

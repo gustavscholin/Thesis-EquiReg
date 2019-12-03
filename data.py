@@ -132,7 +132,7 @@ def get_dataset(type, data_dir, record_spec,
 def get_input_fn(
         data_dir, split, data_info, batch_size, sup_cut=0.1,
         unsup_cut=1.0, unsup_ratio=0, shuffle_seed=None):
-    def input_fn(params):
+    def input_fn():
 
         size = data_info[split]['size']
         sup_cut_size = int(math.ceil(sup_cut * size))
