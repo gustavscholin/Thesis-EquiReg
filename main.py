@@ -31,6 +31,7 @@ from absl import flags
 from models.tiramisu import DenseNetFCN
 from models.tiramisu_tf import DenseTiramisu
 from augmenters import unsup_logits_aug
+from prediction_dice import calc_and_export_dice
 
 os.environ['KMP_AFFINITY'] = 'disabled'
 
@@ -586,6 +587,10 @@ def train():
                     preds = []
                 else:
                     example_cnt += 1
+
+        if FLAGS.pred_dataset == 'val':
+            tf.logging.info('Calculating Dice scores')
+            calc_and_export_dice(out_path)
 
 
 def main(_):
