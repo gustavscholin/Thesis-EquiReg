@@ -516,7 +516,7 @@ def train():
             serving_input_receiver_fn=serving_input_receiver_fn,
             exports_to_keep=3)
 
-        final_exporter = tf.estimator.FinalExporter(
+        latest_exporter = tf.estimator.LatestExporter(
             name="final_exporter",
             serving_input_receiver_fn=serving_input_receiver_fn)
 
@@ -525,7 +525,7 @@ def train():
 
         train_spec = tf.estimator.TrainSpec(input_fn=train_input_fn, max_steps=FLAGS.train_steps, hooks=[stop_hook])
         eval_spec = tf.estimator.EvalSpec(input_fn=eval_input_fn, steps=eval_steps,
-                                          exporters=[best_exporter, final_exporter], start_delay_secs=0,
+                                          exporters=[best_exporter, latest_exporter], start_delay_secs=0,
                                           throttle_secs=10)
         tf.estimator.train_and_evaluate(estimator, train_spec, eval_spec)
     else:
