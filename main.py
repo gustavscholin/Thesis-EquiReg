@@ -550,11 +550,11 @@ def train():
 
         tf.logging.info('***** Running prediction *****')
 
-        out_path = os.path.join(FLAGS.model_dir, 'best_{}_prediction'.format(FLAGS.pred_dataset))
+        out_path = os.path.join(FLAGS.model_dir, 'final_{}_prediction'.format(FLAGS.pred_dataset))
         if not os.path.exists(out_path):
             os.makedirs(out_path)
 
-        best_export_dir = sorted(glob.glob(os.path.join(FLAGS.model_dir, 'export/best_exporter/*')))[-1]
+        best_export_dir = sorted(glob.glob(os.path.join(FLAGS.model_dir, 'export/final_exporter/*')))[-1]
 
         model = tf.saved_model.load_v2(best_export_dir)
         predict = model.signatures["serving_default"]
