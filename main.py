@@ -510,17 +510,23 @@ def train():
 
         serving_input_receiver_fn = tf.estimator.export.build_raw_serving_input_receiver_fn(
             {'image': tf.placeholder(tf.float32, [None, 224, 224, 4], name='input_images')})
-        exporter = tf.estimator.BestExporter(
+
+        best_exporter = tf.estimator.BestExporter(
             name="best_exporter",
             serving_input_receiver_fn=serving_input_receiver_fn,
             exports_to_keep=3)
+
+        final_exporter = tf.estimator.FinalExporter(
+            name="final_exporter",
+            serving_input_receiver_fn=serving_input_receiver_fn)
 
         # Hook to stop training if loss does not decrease in over 10000 steps.
         stop_hook = tf.estimator.experimental.stop_if_no_decrease_hook(estimator, "loss", 10000)
 
         train_spec = tf.estimator.TrainSpec(input_fn=train_input_fn, max_steps=FLAGS.train_steps, hooks=[stop_hook])
-        eval_spec = tf.estimator.EvalSpec(input_fn=eval_input_fn, steps=eval_steps, exporters=exporter,
-                                          start_delay_secs=0, throttle_secs=10)
+        eval_spec = tf.estimator.EvalSpec(input_fn=eval_input_fn, steps=eval_steps,
+                                          exporters=[best_exporter, final_exporter], start_delay_secs=0,
+                                          throttle_secs=10)
         tf.estimator.train_and_evaluate(estimator, train_spec, eval_spec)
     else:
         if FLAGS.do_train:
