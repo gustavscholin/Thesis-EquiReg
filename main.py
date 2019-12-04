@@ -25,11 +25,9 @@ import tensorflow as tf
 import data
 import utils
 import SimpleITK as sitk
-import matplotlib.pyplot as plt
 
 from absl import flags
-from models.tiramisu import DenseNetFCN
-from models.tiramisu_tf import DenseTiramisu
+from models.tiramisu import DenseTiramisu
 from augmenters import unsup_logits_aug
 from prediction_dice import calc_and_export_dice
 
@@ -101,8 +99,10 @@ flags.DEFINE_enum(
     help='Whether to predict the test or the validation dataset.'
 )
 flags.DEFINE_string(
-    'pred_ckpt', default=None,
-    help='Checkpoint to run prediction on.'
+    'pred_ckpt', default='best',
+    help='Checkpoint export to run prediction on. If best, prediction '
+         'on the checkpoint with the lowest eval loss is done. Otherwise '
+         'export dir name must be specified.'
 )
 flags.DEFINE_bool(
     "verbose", default=False,
@@ -128,7 +128,7 @@ flags.DEFINE_integer(
     "save_steps", default=500,
     help="number of steps for model checkpointing.")
 flags.DEFINE_integer(
-    "max_save", default=200,
+    "max_save", default=1,
     help="Maximum number of checkpoints to save.")
 
 # Model config
@@ -514,10 +514,10 @@ def train():
         best_exporter = tf.estimator.BestExporter(
             name="best_exporter",
             serving_input_receiver_fn=serving_input_receiver_fn,
-            exports_to_keep=3)
+            exports_to_keep=1)
 
         latest_exporter = tf.estimator.LatestExporter(
-            name="final_exporter",
+            name="latest_exporter",
             serving_input_receiver_fn=serving_input_receiver_fn)
 
         # Hook to stop training if loss does not decrease in over 10000 steps.
@@ -550,13 +550,18 @@ def train():
 
         tf.logging.info('***** Running prediction *****')
 
-        out_path = os.path.join(FLAGS.model_dir, 'final_{}_prediction'.format(FLAGS.pred_dataset))
+
+        if FLAGS.pred_ckpt == 'best':
+            out_path = os.path.join(FLAGS.model_dir, 'best_{}_prediction'.format(FLAGS.pred_dataset))
+            export_dir = sorted(glob.glob(os.path.join(FLAGS.model_dir, 'export/best_exporter/*')))[-1]
+        else:
+            out_path = os.path.join(FLAGS.model_dir, '{}_{}_prediction'.format(FLAGS.pred_ckpt, FLAGS.pred_dataset))
+            export_dir = os.path.join(FLAGS.model_dir, 'export/latest_exporter/{}'.format(FLAGS.pred_ckpt))
+
         if not os.path.exists(out_path):
             os.makedirs(out_path)
 
-        best_export_dir = sorted(glob.glob(os.path.join(FLAGS.model_dir, 'export/final_exporter/*')))[-1]
-
-        model = tf.saved_model.load_v2(best_export_dir)
+        model = tf.saved_model.load_v2(export_dir)
         predict = model.signatures["serving_default"]
 
         dataset = test_input_fn()

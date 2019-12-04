@@ -1,3 +1,4 @@
+#!/bin/bash
 python main.py \
   --do_eval_along_training=False \
   --do_predict=True \
