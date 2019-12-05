@@ -445,7 +445,21 @@ def get_model_fn():
             every_n_iter=FLAGS.iterations,
             formatter=formatter)
 
-        training_hooks = [logging_hook]
+        if FLAGS.unsup_ratio > 0:
+            training_summaries = [tf.summary.scalar('sup/loss', total_loss),
+                                  tf.summary.scalar('sup/pred_prob', metric_dict['sup/pred_prob']),
+                                  tf.summary.scalar('unsup/loss', metric_dict['unsup/loss']),
+                                  tf.summary.scalar('unsup/ori_prob', metric_dict['unsup/ori_prob']),
+                                  tf.summary.scalar('unsup/aug_prob', metric_dict['unsup/aug_prob'])]
+            training_summary_hook = tf.train.SummarySaverHook(
+                save_steps=100,
+                output_dir=FLAGS.model_dir,
+                summary_op=training_summaries
+            )
+            training_hooks = [logging_hook, training_summary_hook]
+        else:
+            training_hooks = [logging_hook]
+
         #### Constucting training TPUEstimatorSpec.
         train_spec = tf.estimator.EstimatorSpec(
             mode=mode, loss=total_loss, train_op=train_op,
@@ -518,7 +532,8 @@ def train():
 
         latest_exporter = tf.estimator.LatestExporter(
             name="latest_exporter",
-            serving_input_receiver_fn=serving_input_receiver_fn)
+            serving_input_receiver_fn=serving_input_receiver_fn,
+            exports_to_keep=None)
 
         # Hook to stop training if loss does not decrease in over 10000 steps.
         stop_hook = tf.estimator.experimental.stop_if_no_decrease_hook(estimator, "loss", 10000)
