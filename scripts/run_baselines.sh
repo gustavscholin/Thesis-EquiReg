@@ -1,5 +1,5 @@
 #!/bin/bash
-sup_cuts="1.0 0.1 0.01 0.001"
+sup_cuts="0.01 0.001 0.1 1.0"
 data_dir=data/processed_data
 
 for experiment_number in {1..3}; do
@@ -15,7 +15,7 @@ for experiment_number in {1..3}; do
       --shuffle_seed=42 \
       --train_batch_size=4 \
       --train_steps=100000 \
-      --max_save=10 \
+      --max_save=1 \
       --data_dir=${data_dir} \
       --model_dir=${model_dir}
 
