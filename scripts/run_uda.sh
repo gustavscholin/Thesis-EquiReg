@@ -9,13 +9,14 @@ python main.py \
   --do_predict=False \
   --sup_cut=${sup_cut} \
   --unsup_cut=${unsup_cut} \
-  --unsup_ratio=3 \
+  --unsup_ratio=2 \
   --shuffle_seed=42 \
-  --train_batch_size=4 \
+  --train_batch_size=1 \
   --train_steps=100000 \
   --max_save=1 \
   --data_dir=${data_dir} \
-  --model_dir=${model_dir}
+  --model_dir=${model_dir} \
+  --unsup_coeff=0.1
 
 python main.py \
   --do_eval_along_training=False \
