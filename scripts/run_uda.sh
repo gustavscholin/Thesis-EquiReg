@@ -16,7 +16,7 @@ python main.py \
   --max_save=1 \
   --data_dir=${data_dir} \
   --model_dir=${model_dir} \
-  --unsup_coeff=0.1
+  --unsup_coeff=10
 
 python main.py \
   --do_eval_along_training=False \
