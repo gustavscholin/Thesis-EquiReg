@@ -51,7 +51,7 @@ flags.DEFINE_integer(
 )
 flags.DEFINE_enum(
     "tsa", "",
-    enum_values=["", "linear_schedule", "log_schedule", "exp_schedule"],
+    enum_values=["", "linear_schedule", "log_schedule", "exp_schedule", "soft"],
     help="anneal schedule of training signal annealing. "
          "tsa='' means not using TSA. See the paper for other schedules.")
 flags.DEFINE_float(
@@ -188,20 +188,26 @@ def _kl_divergence_with_logits(p_logits, q_logits):
 
 
 def anneal_sup_loss(sup_logits, sup_labels, sup_loss, global_step, metric_dict):
-    tsa_start = 1. / FLAGS.num_classes
-    eff_train_prob_threshold = get_tsa_threshold(
-        FLAGS.tsa, global_step, FLAGS.train_steps,
-        tsa_start, end=1)
-
     one_hot_labels = tf.one_hot(
         sup_labels, depth=FLAGS.num_classes, dtype=tf.float32)
     sup_probs = tf.nn.softmax(sup_logits, axis=-1)
     correct_label_probs = tf.reduce_sum(
         one_hot_labels * sup_probs, axis=-1)
+
+    # if FLAGS.tsa == 'soft':
+    #     loss_mask = 1 - tf.cast(correct_label_probs, tf.float32)
+    #     loss_mask = tf.stop_gradient(loss_mask)
+    # else:
+    tsa_start = 1. / FLAGS.num_classes
+    eff_train_prob_threshold = get_tsa_threshold(
+        FLAGS.tsa, global_step, FLAGS.train_steps,
+        tsa_start, end=1)
+
     larger_than_threshold = tf.greater(
         correct_label_probs, eff_train_prob_threshold)
     loss_mask = 1 - tf.cast(larger_than_threshold, tf.float32)
     loss_mask = tf.stop_gradient(loss_mask)
+
     sup_loss = sup_loss * loss_mask
     avg_sup_loss = (tf.reduce_sum(sup_loss) /
                     tf.maximum(tf.reduce_sum(loss_mask), 1))
@@ -450,7 +456,14 @@ def get_model_fn():
                                   tf.summary.scalar('sup/pred_prob', metric_dict['sup/pred_prob']),
                                   tf.summary.scalar('unsup/loss', metric_dict['unsup/loss']),
                                   tf.summary.scalar('unsup/ori_prob', metric_dict['unsup/ori_prob']),
-                                  tf.summary.scalar('unsup/aug_prob', metric_dict['unsup/aug_prob'])]
+                                  tf.summary.scalar('unsup/aug_prob', metric_dict['unsup/aug_prob'])
+                                  ]
+            if FLAGS.tsa:
+                training_summaries.append(
+                    tf.summary.scalar('sup/sup_trained_ratio', metric_dict['sup/sup_trained_ratio']))
+                training_summaries.append(
+                    tf.summary.scalar('sup/eff_train_prob_threshold', metric_dict["sup/eff_train_prob_threshold"]))
+
             training_summary_hook = tf.train.SummarySaverHook(
                 save_steps=100,
                 output_dir=FLAGS.model_dir,
@@ -564,7 +577,6 @@ def train():
         tf.enable_eager_execution()
 
         tf.logging.info('***** Running prediction *****')
-
 
         if FLAGS.pred_ckpt == 'best':
             out_path = os.path.join(FLAGS.model_dir, 'best_{}_prediction'.format(FLAGS.pred_dataset))
