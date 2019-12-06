@@ -548,10 +548,12 @@ def train():
             serving_input_receiver_fn=serving_input_receiver_fn,
             exports_to_keep=None)
 
-        # Hook to stop training if loss does not decrease in over 10000 steps.
-        stop_hook = tf.estimator.experimental.stop_if_no_decrease_hook(estimator, "loss", 10000)
+        hooks = []
 
-        train_spec = tf.estimator.TrainSpec(input_fn=train_input_fn, max_steps=FLAGS.train_steps, hooks=[stop_hook])
+        # Hook to stop training if loss does not decrease in over 10000 steps.
+        # hooks.append(tf.estimator.experimental.stop_if_no_decrease_hook(estimator, "loss", 10000))
+
+        train_spec = tf.estimator.TrainSpec(input_fn=train_input_fn, max_steps=FLAGS.train_steps, hooks=hooks)
         eval_spec = tf.estimator.EvalSpec(input_fn=eval_input_fn, steps=eval_steps,
                                           exporters=[best_exporter, latest_exporter], start_delay_secs=0,
                                           throttle_secs=10)

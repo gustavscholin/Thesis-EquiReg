@@ -16,7 +16,9 @@ python main.py \
   --max_save=1 \
   --data_dir=${data_dir} \
   --model_dir=${model_dir} \
-  --unsup_coeff=10
+  --unsup_coeff=1 \
+  --train_steps=50000 \
+  --tsa=linear_schedule
 
 python main.py \
   --do_eval_along_training=False \
