@@ -66,8 +66,8 @@ flags.DEFINE_float(
 flags.DEFINE_float(
     "ent_min_coeff", default=0,
     help="")
-flags.DEFINE_integer(
-    "unsup_coeff", default=1,
+flags.DEFINE_float(
+    "unsup_coeff", default=1.0,
     help="The coefficient on the UDA loss. "
          "setting unsup_coeff to 1 works for most settings. "
          "When you have extermely few samples, consider increasing unsup_coeff")
