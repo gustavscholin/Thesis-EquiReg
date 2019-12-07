@@ -71,6 +71,10 @@ flags.DEFINE_float(
     help="The coefficient on the UDA loss. "
          "setting unsup_coeff to 1 works for most settings. "
          "When you have extermely few samples, consider increasing unsup_coeff")
+flags.DEFINE_bool(
+    'unsup_crop', default=False,
+    help='Whether to only calculate unsup loss from non-zero input pixels or not.'
+)
 
 # Experiment (data/checkpoint/directory) config
 flags.DEFINE_string(
@@ -187,32 +191,39 @@ def _kl_divergence_with_logits(p_logits, q_logits):
     return kl
 
 
-def anneal_sup_loss(sup_logits, sup_labels, sup_loss, global_step, metric_dict):
+def anneal_sup_loss(sup_logits, sup_labels, sup_loss, global_step, training_summaries):
     one_hot_labels = tf.one_hot(
         sup_labels, depth=FLAGS.num_classes, dtype=tf.float32)
     sup_probs = tf.nn.softmax(sup_logits, axis=-1)
     correct_label_probs = tf.reduce_sum(
         one_hot_labels * sup_probs, axis=-1)
 
-    # if FLAGS.tsa == 'soft':
-    #     loss_mask = 1 - tf.cast(correct_label_probs, tf.float32)
-    #     loss_mask = tf.stop_gradient(loss_mask)
-    # else:
-    tsa_start = 1. / FLAGS.num_classes
-    eff_train_prob_threshold = get_tsa_threshold(
-        FLAGS.tsa, global_step, FLAGS.train_steps,
-        tsa_start, end=1)
+    if FLAGS.tsa == 'soft':
+        loss_mask = 1 - tf.cast(correct_label_probs, tf.float32)
+        loss_mask = tf.stop_gradient(loss_mask)
 
-    larger_than_threshold = tf.greater(
-        correct_label_probs, eff_train_prob_threshold)
-    loss_mask = 1 - tf.cast(larger_than_threshold, tf.float32)
-    loss_mask = tf.stop_gradient(loss_mask)
+        sup_loss = sup_loss * loss_mask
+        avg_sup_loss = tf.reduce_mean(tf.reduce_mean(sup_loss, axis=(-1, -2)))
+    else:
+        tsa_start = 1. / FLAGS.num_classes
+        eff_train_prob_threshold = get_tsa_threshold(
+            FLAGS.tsa, global_step, FLAGS.train_steps,
+            tsa_start, end=1)
 
-    sup_loss = sup_loss * loss_mask
-    avg_sup_loss = (tf.reduce_sum(sup_loss) /
-                    tf.maximum(tf.reduce_sum(loss_mask), 1))
-    metric_dict["sup/sup_trained_ratio"] = tf.reduce_mean(loss_mask)
-    metric_dict["sup/eff_train_prob_threshold"] = eff_train_prob_threshold
+        larger_than_threshold = tf.greater(
+            correct_label_probs, eff_train_prob_threshold)
+        loss_mask = 1 - tf.cast(larger_than_threshold, tf.float32)
+        loss_mask = tf.stop_gradient(loss_mask)
+
+        training_summaries.append(
+            tf.summary.scalar('sup/sup_trained_ratio', tf.reduce_mean(loss_mask)))
+        training_summaries.append(
+            tf.summary.scalar('sup/eff_train_prob_threshold', eff_train_prob_threshold))
+
+        sup_loss = sup_loss * loss_mask
+        avg_sup_loss = tf.reduce_mean((tf.reduce_sum(sup_loss, axis=(-1, -2)) /
+                                       tf.maximum(tf.reduce_sum(loss_mask, axis=(-1, -2)), 1)))
+
     return sup_loss, avg_sup_loss
 
 
@@ -262,6 +273,7 @@ def get_model_fn():
         #### Configuring the optimizer
         global_step = tf.train.get_global_step()
         metric_dict = {}
+        training_summaries = []
         is_training = (mode == tf.estimator.ModeKeys.TRAIN)
         if FLAGS.unsup_ratio > 0 and is_training:
             all_images = tf.concat([features["image"],
@@ -294,15 +306,16 @@ def get_model_fn():
             labels=sup_masks,
             logits=sup_logits)
         sup_prob = tf.nn.softmax(sup_logits, axis=-1)
-        metric_dict["sup/pred_prob"] = tf.reduce_mean(tf.reduce_mean(
-            tf.reduce_max(sup_prob, axis=-1), axis=(-1, -2)))
-        if FLAGS.tsa:
+        training_summaries.append(tf.summary.scalar('sup/pred_prob', tf.reduce_mean(tf.reduce_mean(
+            tf.reduce_max(sup_prob, axis=-1), axis=(-1, -2)))))
+        if FLAGS.tsa and is_training:
             # TODO: Implement TSA
             sup_loss, avg_sup_loss = anneal_sup_loss(sup_logits, sup_masks, sup_loss,
-                                                     global_step, metric_dict)
+                                                     global_step, training_summaries)
         else:
             avg_sup_loss = tf.reduce_mean(tf.reduce_mean(sup_loss, axis=(-1, -2)))
         total_loss = avg_sup_loss
+        training_summaries.append(tf.summary.scalar('sup/loss', avg_sup_loss))
 
         if FLAGS.unsup_ratio > 0 and is_training:
             aug_bsz = tf.shape(features["ori_image"])[0]
@@ -319,10 +332,11 @@ def get_model_fn():
             ori_logits_aug.set_shape(ori_logits_tgt.shape)
             ori_prob = tf.nn.softmax(ori_logits_aug, axis=-1)
             aug_prob = tf.nn.softmax(aug_logits, axis=-1)
-            metric_dict["unsup/ori_prob"] = tf.reduce_mean(tf.reduce_mean(
-                tf.reduce_max(ori_prob, axis=-1), axis=(-1, -2)))
-            metric_dict["unsup/aug_prob"] = tf.reduce_mean(tf.reduce_mean(
-                tf.reduce_max(aug_prob, axis=-1), axis=(-1, -2)))
+
+            training_summaries.append(tf.summary.scalar('unsup/ori_prob', tf.reduce_mean(tf.reduce_mean(
+                tf.reduce_max(ori_prob, axis=-1), axis=(-1, -2)))))
+            training_summaries.append(tf.summary.scalar('unsup/aug_prob', tf.reduce_mean(tf.reduce_mean(
+                tf.reduce_max(aug_prob, axis=-1), axis=(-1, -2)))))
 
             aug_loss = _kl_divergence_with_logits(
                 p_logits=tf.stop_gradient(ori_logits_aug),
@@ -337,7 +351,7 @@ def get_model_fn():
             #     loss_mask = tf.stop_gradient(loss_mask)
             #     aug_loss = aug_loss * loss_mask
             #     metric_dict["unsup/high_prob_loss"] = tf.reduce_mean(aug_loss)
-            #
+
             # if FLAGS.ent_min_coeff > 0:
             #     ent_min_coeff = FLAGS.ent_min_coeff
             #     metric_dict["unsup/ent_min_coeff"] = ent_min_coeff
@@ -345,9 +359,19 @@ def get_model_fn():
             #     ent_min_loss = tf.reduce_mean(per_example_ent)
             #     total_loss = total_loss + ent_min_coeff * ent_min_loss
 
-            avg_unsup_loss = tf.reduce_mean(tf.reduce_mean(aug_loss, axis=(-1, -2)))
+            if FLAGS.unsup_crop:
+                aug_image_sum = tf.reduce_sum(features['aug_image'], axis=-1)
+                loss_mask = tf.greater(aug_image_sum, tf.zeros(aug_image_sum.shape))
+                loss_mask = tf.stop_gradient(loss_mask)
+
+                aug_loss = aug_loss * loss_mask
+                avg_unsup_loss = tf.reduce_mean((tf.reduce_sum(aug_loss, axis=(-1, -2)) /
+                                                 tf.maximum(tf.reduce_sum(loss_mask, axis=(-1, -2)), 1)))
+            else:
+                avg_unsup_loss = tf.reduce_mean(tf.reduce_mean(aug_loss, axis=(-1, -2)))
+
             total_loss += FLAGS.unsup_coeff * avg_unsup_loss
-            metric_dict["unsup/loss"] = avg_unsup_loss
+            training_summaries.append(tf.summary.scalar('unsup/loss', avg_unsup_loss))
 
         # total_loss = utils.decay_weights(
         #    total_loss,
@@ -444,6 +468,7 @@ def get_model_fn():
                     "loss {training/loss:.4f} "
                     "sup/acc {sup/acc:.4f} sup/loss {sup/sup_loss:.6f} ")
         if FLAGS.unsup_ratio > 0:
+            metric_dict["unsup/loss"] = avg_unsup_loss
             log_info += "unsup/loss {unsup/loss:.6f} "
         formatter = lambda kwargs: log_info.format(**kwargs)
         logging_hook = tf.train.LoggingTensorHook(
@@ -452,17 +477,16 @@ def get_model_fn():
             formatter=formatter)
 
         if FLAGS.unsup_ratio > 0:
-            training_summaries = [tf.summary.scalar('sup/loss', total_loss),
-                                  tf.summary.scalar('sup/pred_prob', metric_dict['sup/pred_prob']),
-                                  tf.summary.scalar('unsup/loss', metric_dict['unsup/loss']),
-                                  tf.summary.scalar('unsup/ori_prob', metric_dict['unsup/ori_prob']),
-                                  tf.summary.scalar('unsup/aug_prob', metric_dict['unsup/aug_prob'])
-                                  ]
-            if FLAGS.tsa:
-                training_summaries.append(
-                    tf.summary.scalar('sup/sup_trained_ratio', metric_dict['sup/sup_trained_ratio']))
-                training_summaries.append(
-                    tf.summary.scalar('sup/eff_train_prob_threshold', metric_dict["sup/eff_train_prob_threshold"]))
+            training_summaries.append(
+                tf.summary.image('ori_image', tf.expand_dims(features['ori_image'][..., 0], -1), 1))
+            training_summaries.append(
+                tf.summary.image('aug_image', tf.expand_dims(features['aug_image'][..., 0], -1), 1))
+            training_summaries.append(tf.summary.image('ori_mask', tf.cast(
+                tf.expand_dims(tf.argmax(ori_logits_aug, axis=-1, output_type=tf.int32), -1),
+                tf.float32), 1))
+            training_summaries.append(tf.summary.image('pred_mask', tf.cast(
+                tf.expand_dims(tf.argmax(aug_logits, axis=-1, output_type=tf.int32), -1),
+                tf.float32), 1))
 
             training_summary_hook = tf.train.SummarySaverHook(
                 save_steps=100,
@@ -549,7 +573,6 @@ def train():
             exports_to_keep=None)
 
         hooks = []
-
         # Hook to stop training if loss does not decrease in over 10000 steps.
         # hooks.append(tf.estimator.experimental.stop_if_no_decrease_hook(estimator, "loss", 10000))
 

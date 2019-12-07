@@ -12,13 +12,13 @@ python main.py \
   --unsup_ratio=2 \
   --shuffle_seed=42 \
   --train_batch_size=1 \
-  --train_steps=100000 \
+  --train_steps=50000 \
   --max_save=1 \
   --data_dir=${data_dir} \
   --model_dir=${model_dir} \
   --unsup_coeff=1 \
-  --train_steps=50000 \
-  --tsa=linear_schedule
+  --tsa= \
+  --unsup_crop=True
 
 python main.py \
   --do_eval_along_training=False \
