@@ -361,7 +361,7 @@ def get_model_fn():
 
             if FLAGS.unsup_crop:
                 aug_image_sum = tf.reduce_sum(features['aug_image'], axis=-1)
-                loss_mask = tf.greater(aug_image_sum, tf.zeros(aug_image_sum.shape))
+                loss_mask = tf.cast(tf.greater(aug_image_sum, tf.zeros(aug_image_sum.shape)), tf.float32)
                 loss_mask = tf.stop_gradient(loss_mask)
 
                 aug_loss = aug_loss * loss_mask
