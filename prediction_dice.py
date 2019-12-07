@@ -1,5 +1,4 @@
 import numpy as np
-import matplotlib.pyplot as plt
 import os
 import glob
 import SimpleITK as sitk
@@ -19,7 +18,10 @@ def dice_score(true, pred, brats_class):
     fp = np.sum(np.logical_and(true_bool == 0, pred_bool == 1))
     fn = np.sum(np.logical_and(true_bool == 1, pred_bool == 0))
 
-    score = (2 * tp) / (2 * tp + fp + fn)
+    if tp + fp + fn == 0:
+        score = 1.0
+    else:
+        score = (2 * tp) / (2 * tp + fp + fn)
 
     return score
 
