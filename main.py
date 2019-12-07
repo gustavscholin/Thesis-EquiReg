@@ -489,7 +489,7 @@ def get_model_fn():
                 tf.float32), 1))
 
             training_summary_hook = tf.train.SummarySaverHook(
-                save_steps=100,
+                save_steps=FLAGS.iterations,
                 output_dir=FLAGS.model_dir,
                 summary_op=training_summaries
             )
