@@ -134,6 +134,12 @@ flags.DEFINE_integer(
 flags.DEFINE_integer(
     "max_save", default=1,
     help="Maximum number of checkpoints to save.")
+flags.DEFINE_integer(
+    'early_stop_steps', default=10000,
+    help='Training will stop if the eval loss has not '
+         'decreased in early_stop_steps number of steps. '
+         'If -1, early stopping is disabled.'
+)
 
 # Model config
 flags.DEFINE_enum(
@@ -573,8 +579,10 @@ def train():
             exports_to_keep=None)
 
         hooks = []
-        # Hook to stop training if loss does not decrease in over 10000 steps.
-        # hooks.append(tf.estimator.experimental.stop_if_no_decrease_hook(estimator, "loss", 10000))
+
+        if FLAGS.early_stop_steps != -1:
+            # Hook to stop training if loss does not decrease in over 10000 steps.
+            hooks.append(tf.estimator.experimental.stop_if_no_decrease_hook(estimator, "loss", 10000))
 
         train_spec = tf.estimator.TrainSpec(input_fn=train_input_fn, max_steps=FLAGS.train_steps, hooks=hooks)
         eval_spec = tf.estimator.EvalSpec(input_fn=eval_input_fn, steps=eval_steps,
