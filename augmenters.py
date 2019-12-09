@@ -103,7 +103,7 @@ def unsup_logits_aug(in_logits, entropy):
         seed_ent = int(entropy[i])
 
         logits = np.copy(in_logits[i, ...])
-        aug = _get_image_augmenter(np.random.SeedSequence(seed_ent))
+        aug = _get_seg_mask_augmenter(np.random.SeedSequence(seed_ent))
         logits_aug = aug.augment(image=logits)
 
         logits_aug[np.all(logits_aug == [0]*4, axis=-1)] = [1, 0, 0, 0]
