@@ -1,5 +1,5 @@
 #!/bin/bash
-sup_cuts="0.01 0.001 0.1 1.0"
+sup_cuts="0.05"
 data_dir=data/processed_data
 
 for experiment_number in {1..3}; do

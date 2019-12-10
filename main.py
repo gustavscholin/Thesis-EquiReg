@@ -109,11 +109,11 @@ flags.DEFINE_string(
          'export dir name must be specified.'
 )
 flags.DEFINE_bool(
-    'plot_train_images', default=False,
+    'plot_train_images', default=True,
     help='Whether to plot eval images to tensorboard during training.'
 )
 flags.DEFINE_bool(
-    'plot_eval_images', default=False,
+    'plot_eval_images', default=True,
     help='Whether to plot train images to tensorboard during training.'
 )
 flags.DEFINE_bool(

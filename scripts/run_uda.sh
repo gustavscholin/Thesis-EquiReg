@@ -17,7 +17,7 @@ python main.py \
   --data_dir=${data_dir} \
   --model_dir=${model_dir} \
   --unsup_coeff=1 \
-  --tsa=log_schedule \
+  --tsa= \
   --early_stop_steps=-1 \
   --unsup_crop=True
 
