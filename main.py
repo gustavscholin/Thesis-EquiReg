@@ -109,6 +109,14 @@ flags.DEFINE_string(
          'export dir name must be specified.'
 )
 flags.DEFINE_bool(
+    'plot_train_images', default=False,
+    help='Whether to plot eval images to tensorboard during training.'
+)
+flags.DEFINE_bool(
+    'plot_eval_images', default=False,
+    help='Whether to plot train images to tensorboard during training.'
+)
+flags.DEFINE_bool(
     "verbose", default=False,
     help="Whether to print additional information.")
 
@@ -412,9 +420,10 @@ def get_model_fn():
                 "eval/classify_enhancing_dice": dice_scores['enhancing']
             }
 
-            tf.summary.image('input', tf.expand_dims(all_images[..., 0], -1), 2)
-            tf.summary.image('gt_mask', tf.cast(tf.expand_dims(sup_masks, -1), tf.float32), 2)
-            tf.summary.image('pred_mask', tf.cast(tf.expand_dims(predictions, -1), tf.float32), 2)
+            if FLAGS.plot_eval_images:
+                tf.summary.image('input', tf.expand_dims(all_images[..., 0], -1), 2)
+                tf.summary.image('gt_mask', tf.cast(tf.expand_dims(sup_masks, -1), tf.float32), 2)
+                tf.summary.image('pred_mask', tf.cast(tf.expand_dims(predictions, -1), tf.float32), 2)
 
             eval_summary_hook = tf.train.SummarySaverHook(
                 save_secs=120,
@@ -482,7 +491,7 @@ def get_model_fn():
             every_n_iter=FLAGS.iterations,
             formatter=formatter)
 
-        if FLAGS.unsup_ratio > 0:
+        if FLAGS.unsup_ratio > 0 and FLAGS.plot_train_images:
             training_summaries.append(
                 tf.summary.image('ori_image', tf.expand_dims(features['ori_image'][..., 0], -1), 1))
             training_summaries.append(
@@ -490,7 +499,7 @@ def get_model_fn():
             training_summaries.append(tf.summary.image('ori_mask', tf.cast(
                 tf.expand_dims(tf.argmax(ori_logits_aug, axis=-1, output_type=tf.int32), -1),
                 tf.float32), 1))
-            training_summaries.append(tf.summary.image('pred_mask', tf.cast(
+            training_summaries.append(tf.summary.image('aug_mask', tf.cast(
                 tf.expand_dims(tf.argmax(aug_logits, axis=-1, output_type=tf.int32), -1),
                 tf.float32), 1))
 
