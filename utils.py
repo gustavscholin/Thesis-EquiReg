@@ -64,18 +64,17 @@ def read_eval_metrics(eval_dir):
 
 
 def plateau_decay(learning_rate, global_step, eval_dir, factor=0.5, patience=6000, min_delta=0,
-                  cooldown=0, min_lr=0, start_step=0):
+                  cooldown=0, min_lr=0):
 
     if not isinstance(learning_rate, tf.Tensor):
         learning_rate = tf.get_variable('learning_rate', initializer=tf.constant(learning_rate), trainable=False,
                                         collections=[tf.GraphKeys.LOCAL_VARIABLES])
 
-    def _no_op(): return tf.identity(learning_rate)
-
-    tf.case([(tf.less_equal(global_step, start_step), _no_op)])
-
     eval_results = read_eval_metrics(eval_dir)
-    loss = eval_results[next(reversed(eval_results))]['loss']
+    if eval_results:
+        loss = eval_results[next(reversed(eval_results))]['loss']
+    else:
+        return tf.identity(learning_rate)
 
     with tf.variable_scope('plateau_decay'):
         step = tf.get_variable('step', trainable=False, initializer=global_step,
@@ -102,6 +101,7 @@ def plateau_decay(learning_rate, global_step, eval_dir, factor=0.5, patience=600
             ]):
                 return tf.identity(learning_rate)
 
+        def _no_op(): return tf.identity(learning_rate)
 
         met_threshold = tf.less(loss, best - min_delta)
         should_decay = tf.greater_equal(global_step - step, patience)

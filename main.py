@@ -468,7 +468,7 @@ def get_model_fn():
         learning_rate = FLAGS.learning_rate
         eval_dir = os.path.join(FLAGS.model_dir, 'eval')
         if FLAGS.dec_lr_on_plateau:
-            learning_rate = utils.plateau_decay(learning_rate, global_step, eval_dir, start_step=FLAGS.save_steps)
+            learning_rate = utils.plateau_decay(learning_rate, global_step, eval_dir)
 
         training_summaries.append(tf.summary.scalar('learning_rate', learning_rate))
 
