@@ -162,9 +162,13 @@ flags.DEFINE_integer(
 flags.DEFINE_float(
     "learning_rate", default=0.003,
     help="Maximum learning rate.")
+# flags.DEFINE_bool(
+#     'const_lr', default=True,
+#     help='Whether the learning rate will be constant during training or not.'
+# )
 flags.DEFINE_bool(
-    'const_lr', default=True,
-    help='Whether the learning rate will be constant during training or not.'
+    'dec_lr_on_plateau', default=True,
+    help='Whether to decrease learning rate on plateau.'
 )
 flags.DEFINE_float(
     "weight_decay_rate", default=1e-4,
@@ -178,7 +182,7 @@ flags.DEFINE_integer(
 
 FLAGS = tf.flags.FLAGS
 
-arg_scope = tf.contrib.framework.arg_scope
+# arg_scope = tf.contrib.framework.arg_scope
 
 
 def get_tsa_threshold(schedule, global_step, num_train_steps, start, end):
@@ -401,11 +405,15 @@ def get_model_fn():
             for v in tf.trainable_variables():
                 tf.logging.info(format_str.format(v.name, v.get_shape()))
 
+        eval_loss = tf.get_variable('eval_loss', trainable=False, initializer=tf.constant(np.Inf, tf.float32),
+                                    collections=[tf.GraphKeys.LOCAL_VARIABLES])
+
         #### Evaluation mode
         if mode == tf.estimator.ModeKeys.EVAL:
             predictions = tf.argmax(sup_logits, axis=-1, output_type=tf.int32)
 
             loss = tf.metrics.mean(tf.reduce_mean(sup_loss, axis=(-1, -2)))
+            tf.assign(loss, eval_loss)
 
             brats_classes = ['whole', 'core', 'enhancing']
             dice_scores = {}
@@ -439,25 +447,31 @@ def get_model_fn():
 
             return eval_spec
 
-        if FLAGS.const_lr:
-            learning_rate = tf.Variable(FLAGS.learning_rate)
-        else:
-            # increase the learning rate linearly
-            if FLAGS.warmup_steps > 0:
-                warmup_lr = tf.to_float(global_step) / tf.to_float(FLAGS.warmup_steps) \
-                            * FLAGS.learning_rate
-            else:
-                warmup_lr = 0.0
+        # if FLAGS.const_lr:
+        #     learning_rate = tf.Variable(FLAGS.learning_rate)
+        # else:
+        #     # increase the learning rate linearly
+        #     if FLAGS.warmup_steps > 0:
+        #         warmup_lr = tf.to_float(global_step) / tf.to_float(FLAGS.warmup_steps) \
+        #                     * FLAGS.learning_rate
+        #     else:
+        #         warmup_lr = 0.0
+        #
+        #     # decay the learning rate using the cosine schedule
+        #     decay_lr = tf.train.cosine_decay(
+        #         FLAGS.learning_rate,
+        #         global_step=global_step - FLAGS.warmup_steps,
+        #         decay_steps=FLAGS.train_steps - FLAGS.warmup_steps,
+        #         alpha=FLAGS.min_lr_ratio)
+        #
+        #     learning_rate = tf.where(global_step < FLAGS.warmup_steps,
+        #                              warmup_lr, decay_lr)
 
-            # decay the learning rate using the cosine schedule
-            decay_lr = tf.train.cosine_decay(
-                FLAGS.learning_rate,
-                global_step=global_step - FLAGS.warmup_steps,
-                decay_steps=FLAGS.train_steps - FLAGS.warmup_steps,
-                alpha=FLAGS.min_lr_ratio)
+        learning_rate = FLAGS.learning_rate
+        training_summaries.append(tf.summary.scalar('sup/eval_loss', eval_loss))
 
-            learning_rate = tf.where(global_step < FLAGS.warmup_steps,
-                                     warmup_lr, decay_lr)
+        if FLAGS.dec_lr_on_plateau:
+            learning_rate = utils.plateau_decay(learning_rate, global_step, eval_loss)
 
         optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
 
@@ -537,6 +551,7 @@ def train():
         sup_cut=FLAGS.sup_cut,
         unsup_cut=FLAGS.unsup_cut,
         unsup_ratio=FLAGS.unsup_ratio,
+        shuffle_seed=FLAGS.shuffle_seed
     )
 
     eval_input_fn = data.get_input_fn(
@@ -591,7 +606,7 @@ def train():
 
         if FLAGS.early_stop_steps != -1:
             # Hook to stop training if loss does not decrease in over 10000 steps.
-            hooks.append(tf.estimator.experimental.stop_if_no_decrease_hook(estimator, "loss", 10000))
+            hooks.append(tf.estimator.experimental.stop_if_no_decrease_hook(estimator, "loss", FLAGS.early_stop_steps))
 
         train_spec = tf.estimator.TrainSpec(input_fn=train_input_fn, max_steps=FLAGS.train_steps, hooks=hooks)
         eval_spec = tf.estimator.EvalSpec(input_fn=eval_input_fn, steps=eval_steps,
@@ -674,11 +689,11 @@ def train():
 
 
 def main(_):
-    if FLAGS.do_train:
+    if FLAGS.do_eval_along_training:
         tf.gfile.MakeDirs(FLAGS.model_dir)
         flags_dict = tf.app.flags.FLAGS.flag_values_dict()
         with tf.gfile.Open(os.path.join(FLAGS.model_dir, "FLAGS.json"), "w") as ouf:
-            json.dump(flags_dict, ouf)
+            json.dump(flags_dict, ouf, indent=4)
 
     train()
 
