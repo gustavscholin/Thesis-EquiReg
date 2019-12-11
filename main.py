@@ -470,7 +470,7 @@ def get_model_fn():
         if FLAGS.dec_lr_on_plateau:
             learning_rate = utils.plateau_decay(learning_rate, global_step, eval_dir)
 
-        training_summaries.append(tf.summary.scalar('learning_rate', learning_rate))
+        training_summaries.append(tf.summary.scalar('lr/learning_rate', learning_rate))
 
         optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
 

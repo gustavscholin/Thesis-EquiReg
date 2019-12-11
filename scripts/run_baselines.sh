@@ -1,10 +1,10 @@
 #!/bin/bash
-sup_cuts="0.05"
+sup_cuts="0.01 0.05 0.1 1.0"
 data_dir=data/processed_data
 
 for experiment_number in {1..3}; do
   for sup_cut in $sup_cuts; do
-    model_dir="ckpt/baseline_${sup_cut}_supervised_${experiment_number}"
+    model_dir="ckpt/new_baseline_${sup_cut}_supervised_${experiment_number}"
 
     python main.py \
       --do_eval_along_training=True \
