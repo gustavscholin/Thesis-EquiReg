@@ -20,13 +20,60 @@ from __future__ import print_function
 
 import tensorflow as tf
 import numpy as np
+import os
+import collections
 
 
-def plateau_decay(learning_rate, global_step, loss, factor=0.5, patience=6000, min_delta=0,
-                  cooldown=0, min_lr=0):
+def _summaries(eval_dir):
+    """Yields `tensorflow.Event` protos from event files in the eval dir.
+
+  Args:
+    eval_dir: Directory containing summary files with eval metrics.
+
+  Yields:
+    `tensorflow.Event` object read from the event files.
+  """
+    if tf.gfile.Exists(eval_dir):
+        for event_file in tf.gfile.Glob(
+                os.path.join(eval_dir, 'events.out.tfevents.*')):
+            for event in tf.train.summary_iterator.summary_iterator(event_file):
+                yield event
+
+
+def read_eval_metrics(eval_dir):
+    """Helper to read eval metrics from eval summary files.
+
+  Args:
+    eval_dir: Directory containing summary files with eval metrics.
+
+  Returns:
+    A `dict` with global steps mapping to `dict` of metric names and values.
+  """
+    eval_metrics_dict = collections.defaultdict(dict)
+    for event in _summaries(eval_dir):
+        if not event.HasField('summary'):
+            continue
+        metrics = {}
+        for value in event.summary.value:
+            if value.HasField('simple_value'):
+                metrics[value.tag] = value.simple_value
+        if metrics:
+            eval_metrics_dict[event.step].update(metrics)
+    return collections.OrderedDict(
+        sorted(eval_metrics_dict.items(), key=lambda t: t[0]))
+
+
+def plateau_decay(learning_rate, global_step, eval_dir, factor=0.5, patience=6000, min_delta=0,
+                  cooldown=0, min_lr=0, start_step=0):
+
     if not isinstance(learning_rate, tf.Tensor):
         learning_rate = tf.get_variable('learning_rate', initializer=tf.constant(learning_rate), trainable=False,
                                         collections=[tf.GraphKeys.LOCAL_VARIABLES])
+    if global_step <= start_step:
+        return tf.identity(learning_rate)
+
+    eval_results = read_eval_metrics(eval_dir)
+    loss = eval_results[next(reversed(eval_results))]['loss']
 
     with tf.variable_scope('plateau_decay'):
         step = tf.get_variable('step', trainable=False, initializer=global_step,
@@ -39,7 +86,7 @@ def plateau_decay(learning_rate, global_step, loss, factor=0.5, patience=6000, m
                 tf.assign(best, loss),
                 tf.assign(step, global_step),
                 tf.print('Plateau Decay: Updated Best - Step:', global_step, 'Next Decay Step:',
-                                global_step + patience, 'Loss:', loss)
+                         global_step + patience, 'Loss:', loss)
             ]):
                 return tf.identity(learning_rate)
 
@@ -49,7 +96,7 @@ def plateau_decay(learning_rate, global_step, loss, factor=0.5, patience=6000, m
                 tf.assign(learning_rate, tf.maximum(tf.multiply(learning_rate, factor), min_lr)),
                 tf.assign(step, global_step + cooldown),
                 tf.print('Plateau Decay: Decayed LR - Step:', global_step, 'Next Decay Step:',
-                                global_step + cooldown + patience, 'Learning Rate:', learning_rate)
+                         global_step + cooldown + patience, 'Learning Rate:', learning_rate)
             ]):
                 return tf.identity(learning_rate)
 

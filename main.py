@@ -22,6 +22,8 @@ import os
 import json
 import numpy as np
 import tensorflow as tf
+import tensorflow_estimator
+
 import data
 import utils
 import SimpleITK as sitk
@@ -405,15 +407,11 @@ def get_model_fn():
             for v in tf.trainable_variables():
                 tf.logging.info(format_str.format(v.name, v.get_shape()))
 
-        eval_loss = tf.get_variable('eval_loss', trainable=False, initializer=tf.constant(np.Inf, tf.float32),
-                                    collections=[tf.GraphKeys.LOCAL_VARIABLES])
-
         #### Evaluation mode
         if mode == tf.estimator.ModeKeys.EVAL:
             predictions = tf.argmax(sup_logits, axis=-1, output_type=tf.int32)
 
             loss = tf.metrics.mean(tf.reduce_mean(sup_loss, axis=(-1, -2)))
-            tf.assign(loss, eval_loss)
 
             brats_classes = ['whole', 'core', 'enhancing']
             dice_scores = {}
@@ -468,10 +466,9 @@ def get_model_fn():
         #                              warmup_lr, decay_lr)
 
         learning_rate = FLAGS.learning_rate
-        training_summaries.append(tf.summary.scalar('sup/eval_loss', eval_loss))
-
+        eval_dir = os.path.join(FLAGS.model_dir, 'eval')
         if FLAGS.dec_lr_on_plateau:
-            learning_rate = utils.plateau_decay(learning_rate, global_step, eval_loss)
+            learning_rate = utils.plateau_decay(learning_rate, global_step, eval_dir, start_step=FLAGS.save_steps)
 
         optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
 
