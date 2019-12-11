@@ -12,13 +12,13 @@ python main.py \
   --unsup_ratio=2 \
   --shuffle_seed=42 \
   --train_batch_size=1 \
-  --train_steps=70000 \
+  --train_steps=100000 \
   --max_save=1 \
   --data_dir=${data_dir} \
   --model_dir=${model_dir} \
   --unsup_coeff=1 \
   --tsa= \
-  --early_stop_steps=-1 \
+  --early_stop_steps=10000 \
   --unsup_crop=True
 
 python main.py \
