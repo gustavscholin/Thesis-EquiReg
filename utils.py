@@ -36,7 +36,7 @@ def _summaries(eval_dir):
     if tf.gfile.Exists(eval_dir):
         for event_file in tf.gfile.Glob(
                 os.path.join(eval_dir, 'events.out.tfevents.*')):
-            for event in tf.train.summary_iterator.summary_iterator(event_file):
+            for event in tf.train.summary_iterator(event_file):
                 yield event
 
 
