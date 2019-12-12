@@ -86,8 +86,8 @@ def plateau_decay(learning_rate, global_step, eval_dir, factor=0.5, patience=600
             with tf.control_dependencies([
                 tf.assign(best, loss),
                 tf.assign(step, global_step),
-                tf.print('Plateau Decay: Updated Best - Step:', global_step, 'Next Decay Step:',
-                         global_step + patience, 'Loss:', loss, output_stream='file:///home/justin/gustav_workspace/thesis-uda-segmentation/decay.out')
+                tf.print('!!!!!!!!!!!!!!!!!!!!!!!Plateau Decay: Updated Best - Step:', global_step, 'Next Decay Step:',
+                         global_step + patience, 'Loss:', loss, '!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
             ]):
                 return tf.identity(learning_rate)
 
@@ -96,8 +96,8 @@ def plateau_decay(learning_rate, global_step, eval_dir, factor=0.5, patience=600
                 tf.assign(best, loss),
                 tf.assign(learning_rate, tf.maximum(tf.multiply(learning_rate, factor), min_lr)),
                 tf.assign(step, global_step + cooldown),
-                tf.print('Plateau Decay: Decayed LR - Step:', global_step, 'Next Decay Step:',
-                         global_step + cooldown + patience, 'Learning Rate:', learning_rate, output_stream='file:///home/justin/gustav_workspace/thesis-uda-segmentation/decay.out')
+                tf.print('!!!!!!!!!!!!!!!!!!!!!!!!!!Plateau Decay: Decayed LR - Step:', global_step, 'Next Decay Step:',
+                         global_step + cooldown + patience, 'Learning Rate:', learning_rate, '!!!!!!!!!!!!!!!!!!!!!!!!')
             ]):
                 return tf.identity(learning_rate)
 
