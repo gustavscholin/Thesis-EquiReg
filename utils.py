@@ -72,7 +72,7 @@ def plateau_decay(learning_rate, global_step, eval_dir, factor=0.5, patience=600
 
     eval_results = read_eval_metrics(eval_dir)
     if eval_results:
-        loss = eval_results[next(reversed(eval_results))]['loss']
+        loss = tf.constant(eval_results[next(reversed(eval_results))]['loss'])
     else:
         return tf.identity(learning_rate)
 
@@ -87,7 +87,7 @@ def plateau_decay(learning_rate, global_step, eval_dir, factor=0.5, patience=600
                 tf.assign(best, loss),
                 tf.assign(step, global_step),
                 tf.print('Plateau Decay: Updated Best - Step:', global_step, 'Next Decay Step:',
-                         global_step + patience, 'Loss:', loss)
+                         global_step + patience, 'Loss:', loss, output_stream='file:///home/justin/gustav_workspace/thesis-uda-segmentation/decay.out')
             ]):
                 return tf.identity(learning_rate)
 
@@ -97,7 +97,7 @@ def plateau_decay(learning_rate, global_step, eval_dir, factor=0.5, patience=600
                 tf.assign(learning_rate, tf.maximum(tf.multiply(learning_rate, factor), min_lr)),
                 tf.assign(step, global_step + cooldown),
                 tf.print('Plateau Decay: Decayed LR - Step:', global_step, 'Next Decay Step:',
-                         global_step + cooldown + patience, 'Learning Rate:', learning_rate)
+                         global_step + cooldown + patience, 'Learning Rate:', learning_rate, output_stream='file:///home/justin/gustav_workspace/thesis-uda-segmentation/decay.out')
             ]):
                 return tf.identity(learning_rate)
 
