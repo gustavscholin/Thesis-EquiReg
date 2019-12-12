@@ -466,9 +466,11 @@ def get_model_fn():
         #                              warmup_lr, decay_lr)
 
         learning_rate = FLAGS.learning_rate
-        eval_dir = os.path.join(FLAGS.model_dir, 'eval')
-        if FLAGS.dec_lr_on_plateau:
-            learning_rate = utils.plateau_decay(learning_rate, global_step, eval_dir)
+        # eval_dir = os.path.join(FLAGS.model_dir, 'eval')
+        # if FLAGS.dec_lr_on_plateau:
+        #     learning_rate = utils.plateau_decay(learning_rate, global_step, eval_dir)
+
+        learning_rate = tf.train.cosine_decay(learning_rate, global_step, int(FLAGS.train_steps / FLAGS.train_batch_size), 0.001)
 
         training_summaries.append(tf.summary.scalar('lr/learning_rate', learning_rate))
 
@@ -572,6 +574,17 @@ def train():
         unsup_cut=0.0,
         unsup_ratio=0
     )
+
+    # test_aug_input_fn = data.get_input_fn(
+    #     data_dir=FLAGS.data_dir,
+    #     split=FLAGS.pred_dataset,
+    #     data_info=data_info,
+    #     batch_size=FLAGS.pred_batch_size,
+    #     sup_cut=1.0,
+    #     unsup_cut=0.0,
+    #     unsup_ratio=0,
+    #     aug=True
+    # )
 
     eval_size = data_info['val']['size']
     eval_steps = eval_size // FLAGS.eval_batch_size
