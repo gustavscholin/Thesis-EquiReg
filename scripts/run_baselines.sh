@@ -14,7 +14,7 @@ for experiment_number in {1..3}; do
       --unsup_ratio=0 \
       --shuffle_seed=42 \
       --train_batch_size=4 \
-      --train_steps=100000 \
+      --train_steps=50000 \
       --save_steps=125 \
       --max_save=1 \
       --data_dir=${data_dir} \
