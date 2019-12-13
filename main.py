@@ -30,7 +30,7 @@ import SimpleITK as sitk
 
 from absl import flags
 from models.tiramisu import DenseTiramisu
-from augmenters import unsup_logits_aug
+from augmenters import unsup_logits_aug, seg_aug
 from prediction_dice import calc_and_export_standard_dice, calc_and_export_consistency_dice
 
 os.environ['KMP_AFFINITY'] = 'disabled'
@@ -169,8 +169,8 @@ flags.DEFINE_float(
 #     help='Whether the learning rate will be constant during training or not.'
 # )
 flags.DEFINE_bool(
-    'dec_lr_on_plateau', default=True,
-    help='Whether to decrease learning rate on plateau.'
+    'cos_lr_dec', default=True,
+    help='Whether to do cosine learning rate decay.'
 )
 flags.DEFINE_float(
     "weight_decay_rate", default=1e-4,
@@ -183,6 +183,7 @@ flags.DEFINE_integer(
     help="Number of steps for linear lr warmup.")
 
 FLAGS = tf.flags.FLAGS
+
 
 # arg_scope = tf.contrib.framework.arg_scope
 
@@ -469,8 +470,9 @@ def get_model_fn():
         # eval_dir = os.path.join(FLAGS.model_dir, 'eval')
         # if FLAGS.dec_lr_on_plateau:
         #     learning_rate = utils.plateau_decay(learning_rate, global_step, eval_dir)
-
-        learning_rate = tf.train.cosine_decay(learning_rate, global_step, int(FLAGS.train_steps / FLAGS.train_batch_size), 0.001)
+        if FLAGS.cos_lr_dec:
+            learning_rate = tf.train.cosine_decay(learning_rate, global_step,
+                                                  int(FLAGS.train_steps / FLAGS.train_batch_size), 0.001)
 
         training_summaries.append(tf.summary.scalar('lr/learning_rate', learning_rate))
 
@@ -636,6 +638,9 @@ def train():
 
         tf.logging.info('***** Running prediction *****')
 
+        with open('data/processed_data/aug_seed.json', 'r') as fp:
+            aug_seeds = json.load(fp)
+
         if FLAGS.pred_ckpt == 'best':
             out_path = os.path.join(FLAGS.model_dir, 'best_{}_prediction'.format(FLAGS.pred_dataset))
             export_dir = sorted(glob.glob(os.path.join(FLAGS.model_dir, 'export/best_exporter/*')))[-1]
@@ -649,7 +654,7 @@ def train():
         model = tf.saved_model.load_v2(export_dir)
         predict = model.signatures["serving_default"]
 
-        for mode in ['standard', 'aug']:
+        for mode in ['standard', 'aug_pred', 'pred_aug']:
             tf.logging.info('Predicting {} images'.format(mode))
 
             mode_out_path = os.path.join(out_path, mode)
@@ -663,7 +668,7 @@ def train():
                 sup_cut=1.0,
                 unsup_cut=0.0,
                 unsup_ratio=0,
-                aug=mode == 'aug'
+                aug=mode == 'aug_pred'
             )
 
             dataset = test_input_fn()
@@ -681,21 +686,28 @@ def train():
                     prediction = prediction_batch[i, ...]
 
                     prediction[np.where(prediction == 3)] = 4
-                    preds.append(np.pad(prediction, ((8, 8), (8, 8))))
+                    preds.append(prediction)
 
                     if example_cnt == data_info[FLAGS.pred_dataset]['slices'][patient_cnt]:
                         patient_id = data_info[FLAGS.pred_dataset]['paths'][patient_cnt].split('/')[-1]
+                        patient_pred = np.stack(preds)
+
+                        if mode == 'pred_aug':
+                            patient_pred = seg_aug(patient_pred, aug_seeds[FLAGS.pred_dataset][patient_id])
 
                         # Make the prediction dims (155,240,240) again for BRATS evaluation
-                        below_padding = np.zeros((data_info[FLAGS.pred_dataset]['crop_idx'][patient_cnt][0], 240, 240))
+                        patient_pred = np.pad(patient_pred, ((0, 0), (8, 8), (8, 8)))
+                        below_padding = np.zeros(
+                            (data_info[FLAGS.pred_dataset]['crop_idx'][patient_cnt][0], 240, 240))
                         above_padding = np.zeros(
                             (155 - data_info[FLAGS.pred_dataset]['crop_idx'][patient_cnt][1], 240, 240))
-                        fill_dim_img = np.concatenate([below_padding, np.stack(preds), above_padding])
+                        fill_dim_patient_pred = np.concatenate([below_padding, patient_pred, above_padding])
 
-                        nii_img = sitk.GetImageFromArray(fill_dim_img)
+                        nii_img = sitk.GetImageFromArray(fill_dim_patient_pred)
                         sitk.WriteImage(nii_img, os.path.join(mode_out_path, '{}.nii.gz'.format(patient_id)))
 
                         tf.logging.info('Exported patient {}'.format(patient_id))
+
                         example_cnt = 1
                         patient_cnt += 1
                         preds = []
@@ -707,7 +719,7 @@ def train():
             calc_and_export_standard_dice(os.path.join(out_path, 'standard'))
 
         tf.logging.info('Calculating consistency Dice scores')
-        calc_and_export_consistency_dice(os.path.join(out_path, 'standard'), os.path.join(out_path, 'aug'))
+        calc_and_export_consistency_dice(os.path.join(out_path, 'pred_aug'), os.path.join(out_path, 'aug_pred'))
 
 
 def main(_):

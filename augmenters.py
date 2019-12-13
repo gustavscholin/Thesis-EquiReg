@@ -87,15 +87,18 @@ def unsup_img_aug(in_image):
     return image, entropy
 
 
-def unsup_seg_aug(in_seg, entropy):
-    entropy = int(entropy[0])
+def seg_aug(in_segs, entropy):
+    out_segs = np.zeros(in_segs.shape, np.float32)
+    for i in range(in_segs.shape[0]):
+        seed_ent = int(entropy[i])
 
-    in_seg = in_seg.astype(np.int32)
-    seg = SegmentationMapsOnImage(np.copy(in_seg), in_seg.shape)
-    aug = _get_image_augmenter(np.random.SeedSequence(entropy))
-    seg_aug = aug.augment(segmentation_maps=seg)
+        seg = np.copy(in_segs[i, ...])
+        aug = _get_seg_mask_augmenter(np.random.SeedSequence(seed_ent))
+        seg_aug = aug.augment(image=seg)
 
-    return seg_aug.get_arr().astype(np.int64)
+        out_segs[i, ...] = seg_aug
+
+    return out_segs
 
 
 def unsup_logits_aug(in_logits, entropy):

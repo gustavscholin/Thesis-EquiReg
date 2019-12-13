@@ -1,8 +1,10 @@
+import json
 import numpy as np
 import os
 import glob
 import SimpleITK as sitk
 import pandas as pd
+import augmenters
 
 brats_class_mapping = {
     'whole': np.array([0, 1, 1, 1, 1]),
@@ -41,12 +43,11 @@ def calc_and_export_standard_dice(pred_data_path):
     input_data_path = 'data/raw_data/downloaded_data/MICCAI_BraTS_2019_Data_Training'
 
     df = pd.DataFrame(columns=['Patient Id', 'Dice Whole', 'Dice Core', 'Dice Enhancing'])
+    file_list = glob.glob(os.path.join(pred_data_path, '*.nii.gz'))
 
-    for file in os.listdir(pred_data_path):
-        if '.nii.gz' not in file:
-            continue
-        patient_id = file.split('.')[0]
-        prediction = sitk.GetArrayFromImage(sitk.ReadImage(os.path.join(pred_data_path, file), sitk.sitkInt32))
+    for file in file_list:
+        patient_id = file.split('/')[-1].split('.')[0]
+        prediction = sitk.GetArrayFromImage(sitk.ReadImage(file, sitk.sitkInt32))
         ground_truth = get_input(patient_id, input_data_path)
 
         dice_whole = dice_score(ground_truth, prediction, 'whole')
@@ -56,39 +57,43 @@ def calc_and_export_standard_dice(pred_data_path):
         df = df.append({'Patient_ID': patient_id, 'Dice Whole': dice_whole, 'Dice Core': dice_core,
                         'Dice Enhancing': dice_enhancing}, ignore_index=True)
 
-    df.to_csv(os.path.join(pred_data_path, 'results.csv'), index=False, float_format='%.6f')
-    df.describe().to_csv(os.path.join(pred_data_path, 'results_summary.csv'), float_format='%.6f')
+    out_path = os.path.join(pred_data_path, '..')
+    df.to_csv(os.path.join(out_path, 'results.csv'), index=False, float_format='%.6f')
+    df.describe().to_csv(os.path.join(out_path, 'results_summary.csv'), float_format='%.6f')
 
     print(df.describe())
 
 
-def calc_and_export_consistency_dice(pred_data_path, aug_data_path):
+def calc_and_export_consistency_dice(pred_aug_data_path, aug_pred_data_path):
     df = pd.DataFrame(
         columns=['Patient Id', 'Consistency Dice Whole', 'Consistency Dice Core', 'Consistency Dice Enhancing'])
 
-    for file, aug_file in zip(os.listdir(pred_data_path), os.listdir(aug_data_path)):
-        if '.nii.gz' not in file:
-            continue
-        patient_id = file.split('.')[0]
-        aug_patient_id = aug_file.split('.')[0]
-        assert (patient_id == aug_patient_id)
+    pred_aug_file_list = glob.glob(os.path.join(pred_aug_data_path, '*.nii.gz'))
+    aug_pred_file_list = glob.glob(os.path.join(aug_pred_data_path, '*.nii.gz'))
 
-        prediction = sitk.GetArrayFromImage(sitk.ReadImage(os.path.join(pred_data_path, file), sitk.sitkInt32))
-        aug_prediction = sitk.GetArrayFromImage(sitk.ReadImage(os.path.join(aug_data_path, aug_file), sitk.sitkInt32))
+    for pred_aug_file, aug_pred_file in zip(pred_aug_file_list, aug_pred_file_list):
+        pred_aug_patient_id = pred_aug_file.split('/')[-1].split('.')[0]
+        aug_pred_patient_id = aug_pred_file.split('/')[-1].split('.')[0]
+        assert (pred_aug_patient_id == aug_pred_patient_id)
 
-        dice_whole = dice_score(aug_prediction, prediction, 'whole')
-        dice_core = dice_score(aug_prediction, prediction, 'core')
-        dice_enhancing = dice_score(aug_prediction, prediction, 'enhancing')
+        pred_aug = sitk.GetArrayFromImage(sitk.ReadImage(pred_aug_file, sitk.sitkInt32))
+        aug_pred = sitk.GetArrayFromImage(sitk.ReadImage(aug_pred_file, sitk.sitkInt32))
+
+        dice_whole = dice_score(aug_pred, pred_aug, 'whole')
+        dice_core = dice_score(aug_pred, pred_aug, 'core')
+        dice_enhancing = dice_score(aug_pred, pred_aug, 'enhancing')
 
         df = df.append(
-            {'Patient_ID': patient_id, 'Consistency Dice Whole': dice_whole, 'Consistency Dice Core': dice_core,
+            {'Patient_ID': pred_aug_patient_id, 'Consistency Dice Whole': dice_whole, 'Consistency Dice Core': dice_core,
              'Consistency Dice Enhancing': dice_enhancing}, ignore_index=True)
 
-    df.to_csv(os.path.join(pred_data_path, 'consistency_results.csv'), index=False, float_format='%.6f')
-    df.describe().to_csv(os.path.join(pred_data_path, 'consistency_results_summary.csv'), float_format='%.6f')
+    out_path = os.path.join(pred_aug_data_path, '..')
+    df.to_csv(os.path.join(out_path, 'consistency_results.csv'), index=False, float_format='%.6f')
+    df.describe().to_csv(os.path.join(out_path, 'consistency_results_summary.csv'), float_format='%.6f')
 
     print(df.describe())
 
 # experiment_name = '100_supervised_1'
-# pred_data_path = os.path.join('data/predictions', 'baseline_1.0_supervised_2_best_val')
-# calc_and_export_standard_dice(pred_data_path)
+# pred_data_path = os.path.join('data/predictions', '1576212472_val_prediction/standard')
+# aug_data_path = os.path.join('data/predictions', '1576212472_val_prediction/aug')
+# calc_and_export_consistency_dice(pred_data_path, aug_data_path, 'val')
