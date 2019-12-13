@@ -19,7 +19,8 @@ python main.py \
   --unsup_coeff=1 \
   --tsa= \
   --early_stop_steps=10000 \
-  --unsup_crop=True
+  --unsup_crop=True \
+  --cos_lr_dec_steps=20000
 
 python main.py \
   --do_eval_along_training=False \
