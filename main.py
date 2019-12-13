@@ -31,7 +31,7 @@ import SimpleITK as sitk
 from absl import flags
 from models.tiramisu import DenseTiramisu
 from augmenters import unsup_logits_aug
-from prediction_dice import calc_and_export_dice
+from prediction_dice import calc_and_export_standard_dice, calc_and_export_consistency_dice
 
 os.environ['KMP_AFFINITY'] = 'disabled'
 
@@ -162,7 +162,7 @@ flags.DEFINE_integer(
 
 # Optimization config
 flags.DEFINE_float(
-    "learning_rate", default=0.003,
+    "learning_rate", default=0.001,
     help="Maximum learning rate.")
 # flags.DEFINE_bool(
 #     'const_lr', default=True,
@@ -575,17 +575,6 @@ def train():
         unsup_ratio=0
     )
 
-    # test_aug_input_fn = data.get_input_fn(
-    #     data_dir=FLAGS.data_dir,
-    #     split=FLAGS.pred_dataset,
-    #     data_info=data_info,
-    #     batch_size=FLAGS.pred_batch_size,
-    #     sup_cut=1.0,
-    #     unsup_cut=0.0,
-    #     unsup_ratio=0,
-    #     aug=True
-    # )
-
     eval_size = data_info['val']['size']
     eval_steps = eval_size // FLAGS.eval_batch_size
 
@@ -660,44 +649,65 @@ def train():
         model = tf.saved_model.load_v2(export_dir)
         predict = model.signatures["serving_default"]
 
-        dataset = test_input_fn()
-        iterator = dataset.make_one_shot_iterator()
+        for mode in ['standard', 'aug']:
+            tf.logging.info('Predicting {} images'.format(mode))
 
-        preds = []
+            mode_out_path = os.path.join(out_path, mode)
+            os.mkdir(mode_out_path)
 
-        example_cnt = 1
-        patient_cnt = 0
+            test_input_fn = data.get_input_fn(
+                data_dir=FLAGS.data_dir,
+                split=FLAGS.pred_dataset,
+                data_info=data_info,
+                batch_size=FLAGS.pred_batch_size,
+                sup_cut=1.0,
+                unsup_cut=0.0,
+                unsup_ratio=0,
+                aug=mode == 'aug'
+            )
 
-        for sample in iterator:
-            prediction_batch = predict(image=sample['image'])['prediction'].numpy()
-            for i in range(prediction_batch.shape[0]):
-                prediction = prediction_batch[i, ...]
+            dataset = test_input_fn()
 
-                prediction[np.where(prediction == 3)] = 4
-                preds.append(np.pad(prediction, ((8, 8), (8, 8))))
+            iterator = dataset.make_one_shot_iterator()
 
-                if example_cnt == data_info[FLAGS.pred_dataset]['slices'][patient_cnt]:
-                    patient_id = data_info[FLAGS.pred_dataset]['paths'][patient_cnt].split('/')[-1]
+            preds = []
 
-                    # Make the prediction dims (155,240,240) again for BRATS evaluation
-                    below_padding = np.zeros((data_info[FLAGS.pred_dataset]['crop_idx'][patient_cnt][0], 240, 240))
-                    above_padding = np.zeros(
-                        (155 - data_info[FLAGS.pred_dataset]['crop_idx'][patient_cnt][1], 240, 240))
-                    fill_dim_img = np.concatenate([below_padding, np.stack(preds), above_padding])
+            example_cnt = 1
+            patient_cnt = 0
 
-                    nii_img = sitk.GetImageFromArray(fill_dim_img)
-                    sitk.WriteImage(nii_img, os.path.join(out_path, '{}.nii.gz'.format(patient_id)))
+            for sample in iterator:
+                prediction_batch = predict(image=sample['image'])['prediction'].numpy()
+                for i in range(prediction_batch.shape[0]):
+                    prediction = prediction_batch[i, ...]
 
-                    tf.logging.info('Exported patient {}'.format(patient_id))
-                    example_cnt = 1
-                    patient_cnt += 1
-                    preds = []
-                else:
-                    example_cnt += 1
+                    prediction[np.where(prediction == 3)] = 4
+                    preds.append(np.pad(prediction, ((8, 8), (8, 8))))
+
+                    if example_cnt == data_info[FLAGS.pred_dataset]['slices'][patient_cnt]:
+                        patient_id = data_info[FLAGS.pred_dataset]['paths'][patient_cnt].split('/')[-1]
+
+                        # Make the prediction dims (155,240,240) again for BRATS evaluation
+                        below_padding = np.zeros((data_info[FLAGS.pred_dataset]['crop_idx'][patient_cnt][0], 240, 240))
+                        above_padding = np.zeros(
+                            (155 - data_info[FLAGS.pred_dataset]['crop_idx'][patient_cnt][1], 240, 240))
+                        fill_dim_img = np.concatenate([below_padding, np.stack(preds), above_padding])
+
+                        nii_img = sitk.GetImageFromArray(fill_dim_img)
+                        sitk.WriteImage(nii_img, os.path.join(mode_out_path, '{}.nii.gz'.format(patient_id)))
+
+                        tf.logging.info('Exported patient {}'.format(patient_id))
+                        example_cnt = 1
+                        patient_cnt += 1
+                        preds = []
+                    else:
+                        example_cnt += 1
 
         if FLAGS.pred_dataset == 'val':
-            tf.logging.info('Calculating Dice scores')
-            calc_and_export_dice(out_path)
+            tf.logging.info('Calculating standard Dice scores')
+            calc_and_export_standard_dice(os.path.join(out_path, 'standard'))
+
+        tf.logging.info('Calculating consistency Dice scores')
+        calc_and_export_consistency_dice(os.path.join(out_path, 'standard'), os.path.join(out_path, 'aug'))
 
 
 def main(_):

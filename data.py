@@ -58,7 +58,7 @@ def _postprocess_example(example):
 
 
 def get_dataset(type, data_dir, record_spec,
-                split, per_core_bsz, size, cut, seed):
+                split, per_core_bsz, size, cut, seed, aug):
     is_training = (split == "train")
 
     def parser(record):
@@ -69,7 +69,7 @@ def get_dataset(type, data_dir, record_spec,
         # reshape image back to 3D shape
         if type == 'sup':
             example['image'] = tf.reshape(example['image'], [224, 224, 4])
-            if not split == 'test':
+            if 'test' not in split and not aug:
                 example['seg_mask'] = tf.reshape(example['seg_mask'], [224, 224])
             if is_training:
                 image, seg_mask = tf.py_func(sup_aug, [example['image'], example['seg_mask']], (tf.float32, tf.int32))
@@ -95,7 +95,11 @@ def get_dataset(type, data_dir, record_spec,
 
         return example
 
-    all_file_list = get_file_list(data_dir, split)
+    if aug:
+        all_file_list = get_file_list(data_dir, '{}_aug'.format(split))
+    else:
+        all_file_list = get_file_list(data_dir, split)
+
     if is_training:
         random.Random(seed).shuffle(all_file_list)
     if type == 'sup':
@@ -108,7 +112,7 @@ def get_dataset(type, data_dir, record_spec,
         dataset = tf.data.TFRecordDataset(dataset, num_parallel_reads=1)
     else:
         dataset = tf.data.TFRecordDataset(dataset, num_parallel_reads=4)
-        
+
     dataset = dataset.map(parser, num_parallel_calls=32)
 
     if is_training:
@@ -131,20 +135,17 @@ def get_dataset(type, data_dir, record_spec,
 
 def get_input_fn(
         data_dir, split, data_info, batch_size, sup_cut=0.1,
-        unsup_cut=1.0, unsup_ratio=0, shuffle_seed=None):
+        unsup_cut=1.0, unsup_ratio=0, shuffle_seed=None, aug=False):
     def input_fn():
 
         size = data_info[split]['size']
-        sup_cut_size = int(math.ceil(sup_cut * size))
-        unsup_cut_size = int(math.floor(unsup_cut * size))
 
         datasets = []
 
         record_spec = {
             'image': tf.FixedLenFeature([224 * 224 * 4], tf.float32)
         }
-
-        if not split == 'test':
+        if 'test' not in split and not aug:
             record_spec['seg_mask'] = tf.FixedLenFeature([224 * 224], tf.int64)
 
         # Supervised data
@@ -157,7 +158,8 @@ def get_input_fn(
                 per_core_bsz=batch_size,
                 size=size,
                 cut=sup_cut,
-                seed=shuffle_seed
+                seed=shuffle_seed,
+                aug=aug
             )
             datasets.append(sup_dataset)
 
@@ -170,7 +172,8 @@ def get_input_fn(
                 per_core_bsz=batch_size * unsup_ratio,
                 size=size,
                 cut=unsup_cut,
-                seed=shuffle_seed
+                seed=shuffle_seed,
+                aug=aug
             )
             datasets.append(aug_dataset)
 

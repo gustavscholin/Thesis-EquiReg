@@ -76,6 +76,7 @@ def sup_aug(in_image, in_seg_mask):
 
     return image, seg_mask
 
+
 def unsup_img_aug(in_image):
     image = np.copy(in_image)
     sq = np.random.SeedSequence()
