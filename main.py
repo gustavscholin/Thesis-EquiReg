@@ -172,6 +172,10 @@ flags.DEFINE_bool(
     'cos_lr_dec', default=True,
     help='Whether to do cosine learning rate decay.'
 )
+flags.DEFINE_integer(
+    'cos_lr_dec_steps', default=-1,
+    help='Whether to do cosine learning rate decay.'
+)
 flags.DEFINE_float(
     "weight_decay_rate", default=1e-4,
     help="Weight decay rate.")
@@ -470,9 +474,9 @@ def get_model_fn():
         # eval_dir = os.path.join(FLAGS.model_dir, 'eval')
         # if FLAGS.dec_lr_on_plateau:
         #     learning_rate = utils.plateau_decay(learning_rate, global_step, eval_dir)
-        if FLAGS.cos_lr_dec:
+        if FLAGS.cos_lr_dec_steps != -1:
             learning_rate = tf.train.cosine_decay(learning_rate, global_step,
-                                                  int(FLAGS.train_steps / FLAGS.train_batch_size), 0.001)
+                                                  FLAGS.cos_lr_dec_steps, 0.001)
 
         training_summaries.append(tf.summary.scalar('lr/learning_rate', learning_rate))
 
