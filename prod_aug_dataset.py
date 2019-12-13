@@ -84,7 +84,7 @@ for split in ['val', 'test']:
             image = tf.reshape(sample['image'], [224, 224, 4]).numpy()
             aug_image, ent = unsup_img_aug(image)
             aug_images.append(aug_image)
-            patient_seeds.append(ent)
+            patient_seeds.append(ent[0])
 
         example_list = get_example_list(aug_images)
         save_tfrecord(example_list, file_name, patient_idx)
