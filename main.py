@@ -470,7 +470,7 @@ def get_model_fn():
         #     learning_rate = tf.where(global_step < FLAGS.warmup_steps,
         #                              warmup_lr, decay_lr)
 
-        learning_rate = FLAGS.learning_rate
+        learning_rate = tf.Variable(FLAGS.learning_rate)
         # eval_dir = os.path.join(FLAGS.model_dir, 'eval')
         # if FLAGS.dec_lr_on_plateau:
         #     learning_rate = utils.plateau_decay(learning_rate, global_step, eval_dir)
