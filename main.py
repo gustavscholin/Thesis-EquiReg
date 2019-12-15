@@ -13,17 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import glob
 import os
 import json
 import numpy as np
 import tensorflow as tf
-import tensorflow_estimator
-
 import data
 import utils
 import SimpleITK as sitk
@@ -57,17 +51,9 @@ flags.DEFINE_enum(
     help="anneal schedule of training signal annealing. "
          "tsa='' means not using TSA. See the paper for other schedules.")
 flags.DEFINE_float(
-    "uda_confidence_thresh", default=-1,
-    help="The threshold on predicted probability on unsupervised data. If set,"
-         "UDA loss will only be calculated on unlabeled examples whose largest"
-         "probability is larger than the threshold")
-flags.DEFINE_float(
     "uda_softmax_temp", -1,
     help="The temperature of the Softmax when making prediction on unlabeled"
          "examples. -1 means to use normal Softmax")
-flags.DEFINE_float(
-    "ent_min_coeff", default=0,
-    help="")
 flags.DEFINE_float(
     "unsup_coeff", default=1.0,
     help="The coefficient on the UDA loss. "
@@ -85,12 +71,6 @@ flags.DEFINE_string(
 flags.DEFINE_string(
     "model_dir", default=None,
     help="model dir of the saved checkpoints.")
-flags.DEFINE_bool(
-    "do_train", default=False,
-    help="Whether to run training.")
-flags.DEFINE_bool(
-    "do_eval", default=False,
-    help="Whether to run eval on the test set.")
 flags.DEFINE_bool(
     "do_eval_along_training", default=True,
     help="Whether to run eval on the test set during training. "
@@ -136,11 +116,11 @@ flags.DEFINE_integer(
     "train_steps", default=100000,
     help="Total number of training steps.")
 flags.DEFINE_integer(
-    "iterations", default=500,
-    help="Number of iterations per repeat loop.")
+    "train_summary_steps", default=500,
+    help="Number of steps for each train summary.")
 flags.DEFINE_integer(
     "save_steps", default=500,
-    help="number of steps for model checkpointing.")
+    help="Number of steps for model checkpointing.")
 flags.DEFINE_integer(
     "max_save", default=1,
     help="Maximum number of checkpoints to save.")
@@ -148,8 +128,7 @@ flags.DEFINE_integer(
     'early_stop_steps', default=10000,
     help='Training will stop if the eval loss has not '
          'decreased in early_stop_steps number of steps. '
-         'If -1, early stopping is disabled.'
-)
+         'If -1, early stopping is disabled.')
 
 # Model config
 flags.DEFINE_enum(
@@ -164,10 +143,6 @@ flags.DEFINE_integer(
 flags.DEFINE_float(
     "learning_rate", default=0.001,
     help="Maximum learning rate.")
-# flags.DEFINE_bool(
-#     'const_lr', default=True,
-#     help='Whether the learning rate will be constant during training or not.'
-# )
 flags.DEFINE_bool(
     'cos_lr_dec', default=True,
     help='Whether to do cosine learning rate decay.'
@@ -187,9 +162,6 @@ flags.DEFINE_integer(
     help="Number of steps for linear lr warmup.")
 
 FLAGS = tf.flags.FLAGS
-
-
-# arg_scope = tf.contrib.framework.arg_scope
 
 
 def get_tsa_threshold(schedule, global_step, num_train_steps, start, end):
@@ -252,15 +224,6 @@ def anneal_sup_loss(sup_logits, sup_labels, sup_loss, global_step, training_summ
     return sup_loss, avg_sup_loss
 
 
-def get_ent(logits, return_mean=True):
-    log_prob = tf.nn.log_softmax(logits, axis=-1)
-    prob = tf.exp(log_prob)
-    ent = tf.reduce_sum(-prob * log_prob, axis=-1)
-    if return_mean:
-        ent = tf.reduce_mean(ent)
-    return ent
-
-
 @tf.function
 def class_convert(true_masks, pred_masks, brats_class):
     brats_class_mapping = {
@@ -290,10 +253,7 @@ def dice_coef(true, pred):
 
 def get_model_fn():
     def model_fn(features, labels, mode, params):
-        # tf.keras.backend.set_learning_phase(mode == tf.estimator.ModeKeys.TRAIN)
-        # model = DenseNetFCN((224, 224, 4), classes=FLAGS.num_classes)
         model = DenseTiramisu(growth_k=16, layers_per_block=[4, 5, 7, 10, 12, 15], num_classes=FLAGS.num_classes)
-        # if not (mode == tf.estimator.ModeKeys.PREDICT and FLAGS.pred_dataset == 'test'):
 
         #### Configuring the optimizer
         global_step = tf.train.get_global_step()
@@ -367,23 +327,6 @@ def get_model_fn():
                 p_logits=tf.stop_gradient(ori_logits_aug),
                 q_logits=aug_logits)
 
-            # if FLAGS.uda_confidence_thresh != -1:
-            #     ori_prob = tf.nn.softmax(ori_logits, axis=-1)
-            #     largest_prob = tf.reduce_max(ori_prob, axis=-1)
-            #     loss_mask = tf.cast(tf.greater(
-            #         largest_prob, FLAGS.uda_confidence_thresh), tf.float32)
-            #     metric_dict["unsup/high_prob_ratio"] = tf.reduce_mean(loss_mask)
-            #     loss_mask = tf.stop_gradient(loss_mask)
-            #     aug_loss = aug_loss * loss_mask
-            #     metric_dict["unsup/high_prob_loss"] = tf.reduce_mean(aug_loss)
-
-            # if FLAGS.ent_min_coeff > 0:
-            #     ent_min_coeff = FLAGS.ent_min_coeff
-            #     metric_dict["unsup/ent_min_coeff"] = ent_min_coeff
-            #     per_example_ent = get_ent(ori_logits)
-            #     ent_min_loss = tf.reduce_mean(per_example_ent)
-            #     total_loss = total_loss + ent_min_coeff * ent_min_loss
-
             if FLAGS.unsup_crop:
                 aug_image_sum = tf.reduce_sum(features['aug_image'], axis=-1)
                 loss_mask = tf.cast(tf.greater(aug_image_sum, tf.zeros(aug_image_sum.shape)), tf.float32)
@@ -450,26 +393,6 @@ def get_model_fn():
 
             return eval_spec
 
-        # if FLAGS.const_lr:
-        #     learning_rate = tf.Variable(FLAGS.learning_rate)
-        # else:
-        #     # increase the learning rate linearly
-        #     if FLAGS.warmup_steps > 0:
-        #         warmup_lr = tf.to_float(global_step) / tf.to_float(FLAGS.warmup_steps) \
-        #                     * FLAGS.learning_rate
-        #     else:
-        #         warmup_lr = 0.0
-        #
-        #     # decay the learning rate using the cosine schedule
-        #     decay_lr = tf.train.cosine_decay(
-        #         FLAGS.learning_rate,
-        #         global_step=global_step - FLAGS.warmup_steps,
-        #         decay_steps=FLAGS.train_steps - FLAGS.warmup_steps,
-        #         alpha=FLAGS.min_lr_ratio)
-        #
-        #     learning_rate = tf.where(global_step < FLAGS.warmup_steps,
-        #                              warmup_lr, decay_lr)
-
         learning_rate = tf.Variable(FLAGS.learning_rate)
         # eval_dir = os.path.join(FLAGS.model_dir, 'eval')
         # if FLAGS.dec_lr_on_plateau:
@@ -509,7 +432,7 @@ def get_model_fn():
         formatter = lambda kwargs: log_info.format(**kwargs)
         logging_hook = tf.train.LoggingTensorHook(
             tensors=metric_dict,
-            every_n_iter=FLAGS.iterations,
+            every_n_iter=FLAGS.train_summary_steps,
             formatter=formatter)
 
         if FLAGS.unsup_ratio > 0 and FLAGS.plot_train_images:
@@ -525,7 +448,7 @@ def get_model_fn():
                 tf.float32), 1))
 
             training_summary_hook = tf.train.SummarySaverHook(
-                save_steps=FLAGS.iterations,
+                save_steps=FLAGS.train_summary_steps,
                 output_dir=FLAGS.model_dir,
                 summary_op=training_summaries
             )
@@ -571,16 +494,6 @@ def train():
         unsup_ratio=0
     )
 
-    test_input_fn = data.get_input_fn(
-        data_dir=FLAGS.data_dir,
-        split=FLAGS.pred_dataset,
-        data_info=data_info,
-        batch_size=FLAGS.pred_batch_size,
-        sup_cut=1.0,
-        unsup_cut=0.0,
-        unsup_ratio=0
-    )
-
     eval_size = data_info['val']['size']
     eval_steps = eval_size // FLAGS.eval_batch_size
 
@@ -620,23 +533,7 @@ def train():
                                           exporters=[best_exporter, latest_exporter], start_delay_secs=0,
                                           throttle_secs=10)
         tf.estimator.train_and_evaluate(estimator, train_spec, eval_spec)
-    else:
-        if FLAGS.do_train:
-            tf.logging.info("***** Running training *****")
-            tf.logging.info("  Supervised batch size = %d", FLAGS.train_batch_size)
-            tf.logging.info("  Unsupervised batch size = %d",
-                            FLAGS.train_batch_size * FLAGS.unsup_ratio)
-            estimator.train(input_fn=train_input_fn, max_steps=FLAGS.train_steps)
-        if FLAGS.do_eval:
-            tf.logging.info("***** Running evaluation *****")
-            results = estimator.evaluate(input_fn=eval_input_fn, steps=eval_steps)
-            tf.logging.info(">> Results:")
-            for key in results.keys():
-                tf.logging.info("  %s = %s", key, str(results[key]))
-                results[key] = results[key].item()
-            acc = results["eval/classify_accuracy"]
-            with tf.gfile.Open("{}/results.txt".format(FLAGS.model_dir), "w") as ouf:
-                ouf.write(str(acc))
+
     if FLAGS.do_predict:
         tf.enable_eager_execution()
 

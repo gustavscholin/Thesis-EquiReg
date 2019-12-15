@@ -33,9 +33,6 @@ class DenseTiramisu(object):
             x: Batch normalized input.
         """
         with tf.variable_scope(name):
-            # x = tf.cond(training, lambda: tf.contrib.layers.batch_norm(x, is_training=True, scope=name + '_batch_norm'),
-            #             lambda: tf.contrib.layers.batch_norm(x, is_training=False, scope=name + '_batch_norm',
-            #                                                  reuse=True))
             x = tf.layers.batch_normalization(x, training=training, name=name + '_batch_norm')
         return x
 
