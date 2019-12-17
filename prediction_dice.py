@@ -54,7 +54,7 @@ def calc_and_export_standard_dice(pred_data_path):
         dice_core = dice_score(ground_truth, prediction, 'core')
         dice_enhancing = dice_score(ground_truth, prediction, 'enhancing')
 
-        df = df.append({'Patient_ID': patient_id, 'Dice Whole': dice_whole, 'Dice Core': dice_core,
+        df = df.append({'Patient Id': patient_id, 'Dice Whole': dice_whole, 'Dice Core': dice_core,
                         'Dice Enhancing': dice_enhancing}, ignore_index=True)
 
     out_path = os.path.join(pred_data_path, '..')
