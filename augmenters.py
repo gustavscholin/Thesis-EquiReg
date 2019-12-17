@@ -101,6 +101,23 @@ def seg_aug(in_segs, entropy):
     return out_segs
 
 
+def img_aug(in_imgs, entropy, is_seg_maps):
+    out_imgs = np.zeros(in_imgs.shape, np.float32)
+    for i in range(in_imgs.shape[0]):
+        seed_ent = int(entropy[i])
+
+        img = np.copy(in_imgs[i, ...])
+        if is_seg_maps:
+            aug = _get_seg_mask_augmenter(np.random.SeedSequence(seed_ent))
+        else:
+            aug = _get_image_augmenter(np.random.SeedSequence(seed_ent))
+        img_aug = aug.augment(image=img)
+
+        out_imgs[i, ...] = img_aug
+
+    return out_imgs
+
+
 def unsup_logits_aug(in_logits, entropy):
     out_logits = np.zeros(in_logits.shape, np.float32)
     for i in range(in_logits.shape[0]):
@@ -110,7 +127,7 @@ def unsup_logits_aug(in_logits, entropy):
         aug = _get_seg_mask_augmenter(np.random.SeedSequence(seed_ent))
         logits_aug = aug.augment(image=logits)
 
-        logits_aug[np.all(logits_aug == [0]*4, axis=-1)] = [1, 0, 0, 0]
+        logits_aug[np.all(logits_aug == [0]*4, axis=-1)] = [1, -np.Inf, -np.Inf, -np.Inf]
         out_logits[i, ...] = logits_aug
 
     return out_logits

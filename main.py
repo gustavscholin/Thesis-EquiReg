@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import glob
+import itertools
 import os
 import json
 import numpy as np
@@ -24,7 +25,7 @@ import SimpleITK as sitk
 
 from absl import flags
 from models.tiramisu import DenseTiramisu
-from augmenters import unsup_logits_aug, seg_aug
+from augmenters import unsup_logits_aug, seg_aug, img_aug
 from prediction_dice import calc_and_export_standard_dice, calc_and_export_consistency_dice
 
 os.environ['KMP_AFFINITY'] = 'disabled'
@@ -60,7 +61,7 @@ flags.DEFINE_float(
          "setting unsup_coeff to 1 works for most settings. "
          "When you have extermely few samples, consider increasing unsup_coeff")
 flags.DEFINE_bool(
-    'unsup_crop', default=False,
+    'unsup_crop', default=True,
     help='Whether to only calculate unsup loss from non-zero input pixels or not.'
 )
 
@@ -540,7 +541,8 @@ def train():
         tf.logging.info('***** Running prediction *****')
 
         with open('data/processed_data/aug_seed.json', 'r') as fp:
-            aug_seeds = json.load(fp)
+            aug_seeds_dict = json.load(fp)
+        aug_seeds_list = list(itertools.chain.from_iterable(list(aug_seeds_dict[FLAGS.pred_dataset].values())))
 
         if FLAGS.pred_ckpt == 'best':
             out_path = os.path.join(FLAGS.model_dir, 'best_{}_prediction'.format(FLAGS.pred_dataset))
@@ -555,65 +557,83 @@ def train():
         model = tf.saved_model.load_v2(export_dir)
         predict = model.signatures["serving_default"]
 
-        for mode in ['standard', 'aug_pred', 'pred_aug']:
-            tf.logging.info('Predicting {} images'.format(mode))
+        tf.logging.info('Predicting images')
 
-            mode_out_path = os.path.join(out_path, mode)
-            os.mkdir(mode_out_path)
+        test_input_fn = data.get_input_fn(
+            data_dir=FLAGS.data_dir,
+            split=FLAGS.pred_dataset,
+            data_info=data_info,
+            batch_size=FLAGS.pred_batch_size,
+            sup_cut=1.0,
+            unsup_cut=0.0,
+            unsup_ratio=0,
+            aug=False
+        )
 
-            test_input_fn = data.get_input_fn(
-                data_dir=FLAGS.data_dir,
-                split=FLAGS.pred_dataset,
-                data_info=data_info,
-                batch_size=FLAGS.pred_batch_size,
-                sup_cut=1.0,
-                unsup_cut=0.0,
-                unsup_ratio=0,
-                aug=mode == 'aug_pred'
-            )
+        dataset = test_input_fn()
+        iterator = dataset.make_one_shot_iterator()
 
-            dataset = test_input_fn()
+        preds = []
+        aug_preds = []
 
-            iterator = dataset.make_one_shot_iterator()
+        example_cnt = 1
+        patient_cnt = 0
+        img_cnt = 0
 
-            preds = []
+        def pad_and_export(patient_pred, mode):
+            # Make the prediction dims (155,240,240) again for BRATS evaluation
+            patient_pred = np.pad(patient_pred, ((0, 0), (8, 8), (8, 8)))
 
-            example_cnt = 1
-            patient_cnt = 0
+            below_padding = np.zeros(
+                (data_info[FLAGS.pred_dataset]['crop_idx'][patient_cnt][0], 240, 240))
+            above_padding = np.zeros(
+                (155 - data_info[FLAGS.pred_dataset]['crop_idx'][patient_cnt][1], 240, 240))
+            patient_pred = np.concatenate([below_padding, patient_pred, above_padding])
 
-            for sample in iterator:
-                prediction_batch = predict(image=sample['image'])['prediction'].numpy()
-                for i in range(prediction_batch.shape[0]):
-                    prediction = prediction_batch[i, ...]
+            if not os.path.exists(os.path.join(out_path, mode)):
+                os.makedirs(os.path.join(out_path, mode))
 
-                    prediction[np.where(prediction == 3)] = 4
-                    preds.append(prediction)
+            patient_pred_nii = sitk.GetImageFromArray(patient_pred)
+            sitk.WriteImage(patient_pred_nii, os.path.join(out_path, mode, '{}.nii.gz'.format(patient_id)))
 
-                    if example_cnt == data_info[FLAGS.pred_dataset]['slices'][patient_cnt]:
-                        patient_id = data_info[FLAGS.pred_dataset]['paths'][patient_cnt].split('/')[-1]
-                        patient_pred = np.stack(preds)
+            tf.logging.info('Exported patient {}'.format(patient_id))
 
-                        if mode == 'pred_aug':
-                            patient_pred = seg_aug(patient_pred, aug_seeds[FLAGS.pred_dataset][patient_id])
+        for sample in iterator:
+            imgs = sample['image'].numpy()
 
-                        # Make the prediction dims (155,240,240) again for BRATS evaluation
-                        patient_pred = np.pad(patient_pred, ((0, 0), (8, 8), (8, 8)))
-                        below_padding = np.zeros(
-                            (data_info[FLAGS.pred_dataset]['crop_idx'][patient_cnt][0], 240, 240))
-                        above_padding = np.zeros(
-                            (155 - data_info[FLAGS.pred_dataset]['crop_idx'][patient_cnt][1], 240, 240))
-                        fill_dim_patient_pred = np.concatenate([below_padding, patient_pred, above_padding])
+            aug_seeds = aug_seeds_list[img_cnt:img_cnt + imgs.shape[0]]
+            imgs_aug = img_aug(imgs, aug_seeds, is_seg_maps=False)
 
-                        nii_img = sitk.GetImageFromArray(fill_dim_patient_pred)
-                        sitk.WriteImage(nii_img, os.path.join(mode_out_path, '{}.nii.gz'.format(patient_id)))
+            pred_batch = predict(image=tf.constant(imgs))['prediction'].numpy()
+            aug_pred_batch = predict(image=tf.constant(imgs_aug))['prediction'].numpy()
 
-                        tf.logging.info('Exported patient {}'.format(patient_id))
+            for i in range(pred_batch.shape[0]):
+                pred = pred_batch[i, ...]
+                aug_pred = aug_pred_batch[i, ...]
 
-                        example_cnt = 1
-                        patient_cnt += 1
-                        preds = []
-                    else:
-                        example_cnt += 1
+                pred[np.where(pred == 3)] = 4
+                aug_pred[np.where(aug_pred == 3)] = 4
+
+                preds.append(pred)
+                aug_preds.append(aug_pred)
+
+                if example_cnt == data_info[FLAGS.pred_dataset]['slices'][patient_cnt]:
+                    patient_id = data_info[FLAGS.pred_dataset]['paths'][patient_cnt].split('/')[-1]
+
+                    patient_pred = np.stack(preds)
+                    patient_aug_pred = np.stack(aug_preds)
+                    patient_pred_aug = img_aug(patient_pred, aug_seeds_dict[FLAGS.pred_dataset][patient_id],
+                                               is_seg_maps=True)
+
+                    pad_and_export(patient_pred, 'standard')
+                    pad_and_export(patient_aug_pred, 'aug_pred')
+                    pad_and_export(patient_pred_aug, 'pred_aug')
+
+                    example_cnt = 1
+                    patient_cnt += 1
+                    preds = []
+                else:
+                    example_cnt += 1
 
         if FLAGS.pred_dataset == 'val':
             tf.logging.info('Calculating standard Dice scores')
