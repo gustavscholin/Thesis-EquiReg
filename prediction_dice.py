@@ -84,7 +84,7 @@ def calc_and_export_consistency_dice(pred_aug_data_path, aug_pred_data_path):
         dice_enhancing = dice_score(aug_pred, pred_aug, 'enhancing')
 
         df = df.append(
-            {'Patient_ID': pred_aug_patient_id, 'Consistency Dice Whole': dice_whole, 'Consistency Dice Core': dice_core,
+            {'Patient Id': pred_aug_patient_id, 'Consistency Dice Whole': dice_whole, 'Consistency Dice Core': dice_core,
              'Consistency Dice Enhancing': dice_enhancing}, ignore_index=True)
 
     out_path = os.path.join(pred_aug_data_path, '..')

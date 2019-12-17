@@ -566,8 +566,7 @@ def train():
             batch_size=FLAGS.pred_batch_size,
             sup_cut=1.0,
             unsup_cut=0.0,
-            unsup_ratio=0,
-            aug=False
+            unsup_ratio=0
         )
 
         dataset = test_input_fn()
