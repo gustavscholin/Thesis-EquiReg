@@ -4,31 +4,33 @@ data_dir=data/processed_data
 save_steps=(125 250 250 500)
 # dec_steps=(2000 5000 7000 50000)
 
-for experiment_number in {1..3}; do
-  for i in {0..3}; do
-    model_dir="ckpt/new_baseline_${sup_cuts[i]}_supervised_${experiment_number}"
+for seed in {43..44}; do
+  for experiment_number in {1..3}; do
+    for i in {0..3}; do
+      model_dir="ckpt/baseline/baseline_${sup_cuts[i]}_${experiment_number}_seed_${seed}"
 
-    python main.py \
-      --do_eval_along_training=True \
-      --do_predict=False \
-      --sup_cut=${sup_cuts[i]} \
-      --unsup_cut=0. \
-      --unsup_ratio=0 \
-      --shuffle_seed=42 \
-      --train_batch_size=4 \
-      --train_steps=50000 \
-      --save_steps=${save_steps[i]} \
-      --max_save=1 \
-      --data_dir=${data_dir} \
-      --model_dir=${model_dir} \
-      --cos_lr_dec_steps=-1
+      python main.py \
+        --do_eval_along_training=True \
+        --do_predict=False \
+        --sup_cut=${sup_cuts[i]} \
+        --unsup_cut=0. \
+        --unsup_ratio=0 \
+        --shuffle_seed=${seed} \
+        --train_batch_size=4 \
+        --train_steps=50000 \
+        --save_steps=${save_steps[i]} \
+        --max_save=1 \
+        --data_dir=${data_dir} \
+        --model_dir=${model_dir} \
+        --cos_lr_dec_steps=-1
 
-    python main.py \
-      --do_eval_along_training=False \
-      --do_predict=True \
-      --data_dir=${data_dir} \
-      --eval_batch_size=16 \
-      --model_dir=${model_dir} \
-      --pred_dataset=val
+      python main.py \
+        --do_eval_along_training=False \
+        --do_predict=True \
+        --data_dir=${data_dir} \
+        --eval_batch_size=16 \
+        --model_dir=${model_dir} \
+        --pred_dataset=val
+    done
   done
 done
