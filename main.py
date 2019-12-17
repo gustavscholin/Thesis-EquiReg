@@ -635,6 +635,7 @@ def train():
                     aug_preds = []
                 else:
                     example_cnt += 1
+            img_cnt += imgs.shape[0]
 
         if FLAGS.pred_dataset == 'val':
             tf.logging.info('Calculating standard Dice scores')
