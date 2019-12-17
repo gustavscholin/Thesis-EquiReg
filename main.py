@@ -632,6 +632,7 @@ def train():
                     example_cnt = 1
                     patient_cnt += 1
                     preds = []
+                    aug_preds = []
                 else:
                     example_cnt += 1
 
