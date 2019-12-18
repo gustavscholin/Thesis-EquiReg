@@ -330,7 +330,7 @@ def get_model_fn():
 
             if FLAGS.unsup_crop:
                 aug_image_sum = tf.reduce_sum(features['aug_image'], axis=-1)
-                loss_mask = tf.cast(tf.greater(aug_image_sum, tf.zeros(aug_image_sum.shape)), tf.float32)
+                loss_mask = tf.cast(tf.not_equal(aug_image_sum, tf.zeros(aug_image_sum.shape)), tf.float32)
                 loss_mask = tf.stop_gradient(loss_mask)
 
                 aug_loss = aug_loss * loss_mask
@@ -378,9 +378,9 @@ def get_model_fn():
             }
 
             if FLAGS.plot_eval_images:
-                tf.summary.image('input', tf.expand_dims(all_images[..., 0], -1), 2)
-                tf.summary.image('gt_mask', tf.cast(tf.expand_dims(sup_masks, -1), tf.float32), 2)
-                tf.summary.image('pred_mask', tf.cast(tf.expand_dims(predictions, -1), tf.float32), 2)
+                tf.summary.image('eval/input', tf.expand_dims(all_images[..., 0], -1), 2)
+                tf.summary.image('eval/gt_mask', tf.cast(tf.expand_dims(sup_masks, -1), tf.float32), 2)
+                tf.summary.image('eval/pred_mask', tf.cast(tf.expand_dims(predictions, -1), tf.float32), 2)
 
             eval_summary_hook = tf.train.SummarySaverHook(
                 save_secs=120,
@@ -440,13 +440,13 @@ def get_model_fn():
 
         if FLAGS.unsup_ratio > 0 and FLAGS.plot_train_images:
             training_summaries.append(
-                tf.summary.image('ori_image', tf.expand_dims(features['ori_image'][..., 0], -1), 1))
+                tf.summary.image('unsup/ori_image', tf.expand_dims(features['ori_image'][..., 0], -1), 1))
             training_summaries.append(
-                tf.summary.image('aug_image', tf.expand_dims(features['aug_image'][..., 0], -1), 1))
-            training_summaries.append(tf.summary.image('ori_mask', tf.cast(
+                tf.summary.image('unsup/aug_image', tf.expand_dims(features['aug_image'][..., 0], -1), 1))
+            training_summaries.append(tf.summary.image('unsup/ori_mask', tf.cast(
                 tf.expand_dims(tf.argmax(ori_logits_aug, axis=-1, output_type=tf.int32), -1),
                 tf.float32), 1))
-            training_summaries.append(tf.summary.image('aug_mask', tf.cast(
+            training_summaries.append(tf.summary.image('unsup/aug_mask', tf.cast(
                 tf.expand_dims(tf.argmax(aug_logits, axis=-1, output_type=tf.int32), -1),
                 tf.float32), 1))
 
