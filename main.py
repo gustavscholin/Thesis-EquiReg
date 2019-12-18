@@ -148,9 +148,9 @@ flags.DEFINE_bool(
     'cos_lr_dec', default=True,
     help='Whether to do cosine learning rate decay.'
 )
-flags.DEFINE_integer(
-    'cos_lr_dec_steps', default=-1,
-    help='Whether to do cosine learning rate decay.'
+flags.DEFINE_bool(
+    'exp_lr_decay', default=False,
+    help='Whether to do exponential learning rate decay.'
 )
 flags.DEFINE_float(
     "weight_decay_rate", default=1e-4,
@@ -336,8 +336,8 @@ def get_model_fn():
                 aug_loss = aug_loss * loss_mask
                 avg_unsup_loss = tf.reduce_mean((tf.reduce_sum(aug_loss, axis=(-1, -2)) /
                                                  tf.maximum(tf.reduce_sum(loss_mask, axis=(-1, -2)), 1)))
-                # training_summaries.append(tf.summary.scalar('unsup/nbr_loss_px', tf.reduce_sum(loss_mask)))
-                training_summaries.append(tf.summary.image('loss_mask', tf.expand_dims(loss_mask, -1), 1))
+
+                training_summaries.append(tf.summary.image('unsup/loss_mask', tf.expand_dims(loss_mask, -1), 1))
             else:
                 avg_unsup_loss = tf.reduce_mean(tf.reduce_mean(aug_loss, axis=(-1, -2)))
 
@@ -400,9 +400,9 @@ def get_model_fn():
         # eval_dir = os.path.join(FLAGS.model_dir, 'eval')
         # if FLAGS.dec_lr_on_plateau:
         #     learning_rate = utils.plateau_decay(learning_rate, global_step, eval_dir)
-        if FLAGS.cos_lr_dec_steps != -1:
-            learning_rate = tf.train.cosine_decay(learning_rate, global_step,
-                                                  FLAGS.cos_lr_dec_steps, 0.001)
+        if FLAGS.exp_lr_decay:
+            learning_rate = tf.train.exponential_decay(learning_rate, global_step,
+                                                       params['epoch_steps'], 0.95)
 
         training_summaries.append(tf.summary.scalar('lr/learning_rate', learning_rate))
 
@@ -500,9 +500,11 @@ def train():
     eval_size = data_info['val']['size']
     eval_steps = eval_size // FLAGS.eval_batch_size
 
+    epoch_steps = int((data_info['train']['size'] * FLAGS.sup_cut) / FLAGS.train_batch_size)
+
     # Get model function
     model_fn = get_model_fn()
-    estimator = utils.get_estimator(FLAGS, model_fn)
+    estimator = utils.get_estimator(FLAGS, model_fn, epoch_steps)
 
     # Training
     if FLAGS.do_eval_along_training:

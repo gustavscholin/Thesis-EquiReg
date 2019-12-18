@@ -3,8 +3,8 @@ sup_cut=(0.01 0.05 0.1)
 unsup_cut=(0.99 0.95 0.9)
 data_dir=data/processed_data
 
-for experiment_nbr in {2..3}; do
-  for i in {0..2}; do
+for experiment_nbr in {4..4}; do
+  for i in {1..1}; do
     model_dir="ckpt/${sup_cut[i]}_${unsup_cut[i]}_uda_${experiment_nbr}"
 
     python main.py \
@@ -15,7 +15,7 @@ for experiment_nbr in {2..3}; do
       --unsup_ratio=2 \
       --shuffle_seed=42 \
       --train_batch_size=1 \
-      --train_steps=50000 \
+      --train_steps=100000 \
       --max_save=1 \
       --data_dir=${data_dir} \
       --model_dir=${model_dir} \
@@ -23,7 +23,7 @@ for experiment_nbr in {2..3}; do
       --tsa= \
       --early_stop_steps=10000 \
       --unsup_crop=True \
-      --cos_lr_dec_steps=-1
+      --exp_lr_decay=True
 
     python main.py \
       --do_eval_along_training=False \

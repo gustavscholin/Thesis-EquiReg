@@ -118,7 +118,7 @@ def decay_weights(cost, weight_decay_rate):
     return cost
 
 
-def get_estimator(FLAGS, model_fn, model_dir=None):
+def get_estimator(FLAGS, model_fn, epoch_steps, model_dir=None):
     ##### Create Estimator
     # Estimator Configuration
     run_config = tf.estimator.RunConfig(
@@ -132,5 +132,6 @@ def get_estimator(FLAGS, model_fn, model_dir=None):
     estimator = tf.estimator.Estimator(
         model_fn=model_fn,
         config=run_config,
-        params={"model_dir": model_dir or FLAGS.model_dir})
+        params={"model_dir": model_dir or FLAGS.model_dir,
+                'epoch_steps': epoch_steps})
     return estimator
