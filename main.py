@@ -336,6 +336,8 @@ def get_model_fn():
                 aug_loss = aug_loss * loss_mask
                 avg_unsup_loss = tf.reduce_mean((tf.reduce_sum(aug_loss, axis=(-1, -2)) /
                                                  tf.maximum(tf.reduce_sum(loss_mask, axis=(-1, -2)), 1)))
+                # training_summaries.append(tf.summary.scalar('unsup/nbr_loss_px', tf.reduce_sum(loss_mask)))
+                training_summaries.append(tf.summary.image('loss_mask', tf.expand_dims(loss_mask, -1), 1))
             else:
                 avg_unsup_loss = tf.reduce_mean(tf.reduce_mean(aug_loss, axis=(-1, -2)))
 
