@@ -1,8 +1,9 @@
 #!/bin/bash
 sup_cut=(0.01 0.05 0.1)
 unsup_cut=(0.99 0.95 0.9)
-min_steps=(20000 50000 50000)
+# min_steps=(0 50000 50000)
 data_dir=data/processed_data
+early_stop_steps=(10000 20000 30000)
 
 for seed in {42..42}; do
   for experiment_nbr in {1..3}; do
@@ -23,8 +24,8 @@ for seed in {42..42}; do
         --model_dir=${model_dir} \
         --unsup_coeff=1 \
         --tsa= \
-        --early_stop_steps=10000 \
-        --min_step=${min_steps[i]} \
+        --early_stop_steps=${early_stop_steps[i]} \
+        --min_step=0 \
         --unsup_crop=True \
         --exp_lr_decay=True
 

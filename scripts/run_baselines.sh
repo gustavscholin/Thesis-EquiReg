@@ -3,7 +3,8 @@ sup_cuts=(0.01 0.05 0.1 1.0)
 data_dir=data/processed_data
 save_steps=(125 250 250 500)
 # dec_steps=(2000 5000 7000 50000)
-min_steps=(5000 12500 12500 50000)
+# min_steps=(0 0 12500 50000)
+early_stop_steps=(2000 10000 10000 20000)
 
 for seed in {42..44}; do
   for experiment_number in {1..3}; do
@@ -23,8 +24,8 @@ for seed in {42..44}; do
         --max_save=1 \
         --data_dir=${data_dir} \
         --model_dir=${model_dir} \
-        --early_stop_steps=10000 \
-        --min_step=${min_steps[i]} \
+        --early_stop_steps=${early_stop_steps[i]}  \
+        --min_step=0 \
         --exp_lr_decay=True
 
       python main.py \
