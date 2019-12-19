@@ -130,6 +130,9 @@ flags.DEFINE_integer(
     help='Training will stop if the eval loss has not '
          'decreased in early_stop_steps number of steps. '
          'If -1, early stopping is disabled.')
+flags.DEFINE_integer(
+    'min_step', default=0,
+    help='Training will not stop earlier than this step.')
 
 # Model config
 flags.DEFINE_enum(
@@ -531,7 +534,8 @@ def train():
 
         if FLAGS.early_stop_steps != -1:
             # Hook to stop training if loss does not decrease in over 10000 steps.
-            hooks.append(tf.estimator.experimental.stop_if_no_decrease_hook(estimator, "loss", FLAGS.early_stop_steps))
+            hooks.append(tf.estimator.experimental.stop_if_no_decrease_hook(estimator, "loss", FLAGS.early_stop_steps,
+                                                                            min_steps=FLAGS.min_step))
 
         train_spec = tf.estimator.TrainSpec(input_fn=train_input_fn, max_steps=FLAGS.train_steps, hooks=hooks)
         eval_spec = tf.estimator.EvalSpec(input_fn=eval_input_fn, steps=eval_steps,

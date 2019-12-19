@@ -1,9 +1,10 @@
 #!/bin/bash
 sup_cut=(0.01 0.05 0.1)
 unsup_cut=(0.99 0.95 0.9)
+min_steps=(20000 50000 50000)
 data_dir=data/processed_data
 
-for experiment_nbr in {4..4}; do
+for experiment_nbr in {1..3}; do
   for i in {1..1}; do
     model_dir="ckpt/${sup_cut[i]}_${unsup_cut[i]}_uda_${experiment_nbr}"
 
@@ -22,6 +23,7 @@ for experiment_nbr in {4..4}; do
       --unsup_coeff=1 \
       --tsa= \
       --early_stop_steps=10000 \
+      --min_step=${min_steps[i]} \
       --unsup_crop=True \
       --exp_lr_decay=True
 
