@@ -26,7 +26,7 @@ for seed in {42..44}; do
         --model_dir=${model_dir} \
         --early_stop_steps=${early_stop_steps[i]}  \
         --min_step=0 \
-        --exp_lr_decay=True
+        --exp_lr_decay=False
 
       python main.py \
         --do_eval_along_training=False \

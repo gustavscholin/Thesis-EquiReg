@@ -27,7 +27,7 @@ for seed in {42..42}; do
         --early_stop_steps=${early_stop_steps[i]} \
         --min_step=0 \
         --unsup_crop=True \
-        --exp_lr_decay=True
+        --exp_lr_decay=False
 
       python main.py \
         --do_eval_along_training=False \
