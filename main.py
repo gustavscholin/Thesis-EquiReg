@@ -528,7 +528,7 @@ def train():
             exports_to_keep=1)
 
         best_ckpt = best_ckpt_copier.BestCheckpointCopier(
-            name="best_exporter",
+            name="best_checkpoint",
             checkpoints_to_keep=1,
             score_metric='loss')
 
