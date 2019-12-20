@@ -6,7 +6,7 @@ data_dir=data/processed_data
 early_stop_steps=(10000 20000 30000)
 
 for experiment_nbr in {1..3}; do
-  for seed in {42..42}; do
+  for seed in {42..44}; do
     for i in {0..2}; do
       model_dir="ckpt/consistency/consistency_${sup_cut[i]}_${unsup_cut[i]}_${experiment_nbr}_seed_${seed}"
 
