@@ -6,8 +6,8 @@ save_steps=(125 250 250 500)
 # min_steps=(0 0 12500 50000)
 early_stop_steps=(2000 10000 10000 20000)
 
-for seed in {42..44}; do
-  for experiment_number in {1..3}; do
+for experiment_number in {1..3}; do
+  for seed in {42..44}; do
     for i in {0..3}; do
       model_dir="ckpt/baseline/baseline_${sup_cuts[i]}_${experiment_number}_seed_${seed}"
 
