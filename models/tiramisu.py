@@ -144,7 +144,7 @@ class DenseTiramisu(object):
         parameters.
         Args:
             x: Tensor, input image to segment.
-            training: Bool Tesnor, indicating whether training or not.
+            training: Bool Tensor, indicating whether training or not.
         Returns:
             x: Tensor, raw unscaled logits of predicted segmentation.
         """
