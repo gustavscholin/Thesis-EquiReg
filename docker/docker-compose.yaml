@@ -1,0 +1,21 @@
+version: '2.3'
+services:
+  uda-thesis:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      args:
+        - USER_ID=${USER_ID}
+        - USER_NAME=${USER}
+    ports:
+      - "7777:6006"
+    image: uda-thesis
+    stdin_open: true
+    tty: true
+    command: bash
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=1
+      - TF_FORCE_GPU_ALLOW_GROWTH=true
+    volumes:
+      - ..:/home/${USER}/src
