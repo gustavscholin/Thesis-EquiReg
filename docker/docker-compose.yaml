@@ -15,7 +15,7 @@ services:
     command: bash
     runtime: nvidia
     environment:
-      - NVIDIA_VISIBLE_DEVICES=1
+      - NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES}
       - TF_FORCE_GPU_ALLOW_GROWTH=true
     volumes:
       - ..:/home/${USER}/src
