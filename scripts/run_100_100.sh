@@ -1,6 +1,5 @@
 #!/bin/bash
 data_dir=data/processed_data
-LD_PRELOAD=/usr/lib/libtcmalloc.so.4
 
 for experiment_nbr in {1..3}; do
       model_dir="ckpt/consistency/consistency_1.0_1.0_${experiment_nbr}"
@@ -11,7 +10,7 @@ for experiment_nbr in {1..3}; do
         --sup_cut=1.0 \
         --unsup_cut=1.0 \
         --unsup_ratio=2 \
-        --train_batch_size=2 \
+        --train_batch_size=1 \
         --train_steps=200000 \
         --max_save=1 \
         --data_dir=${data_dir} \
