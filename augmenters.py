@@ -1,7 +1,6 @@
 import numpy as np
-np.random.bit_generator = np.random._bit_generator
+# np.random.bit_generator = np.random._bit_generator
 import imgaug.augmenters as iaa
-from imgaug.augmentables.segmaps import SegmentationMapsOnImage
 
 
 def _get_light_image_augmenter(sq):

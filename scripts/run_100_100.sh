@@ -4,7 +4,7 @@ data_dir=data/processed_data
 for experiment_nbr in {1..3}; do
       model_dir="ckpt/consistency/consistency_1.0_1.0_${experiment_nbr}"
 
-      python main.py \
+      python main_v2.py \
         --do_eval_along_training=True \
         --do_predict=False \
         --sup_cut=1.0 \
@@ -22,7 +22,7 @@ for experiment_nbr in {1..3}; do
         --unsup_crop=True \
         --exp_lr_decay=False
 
-      python main.py \
+      python main_v2.py \
         --do_eval_along_training=False \
         --do_predict=True \
         --data_dir=${data_dir} \
