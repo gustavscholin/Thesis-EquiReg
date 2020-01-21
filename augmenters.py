@@ -1,4 +1,5 @@
 import numpy as np
+np.random.bit_generator = np.random._bit_generator
 import imgaug.augmenters as iaa
 from imgaug.augmentables.segmaps import SegmentationMapsOnImage
 
