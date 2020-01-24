@@ -14,4 +14,4 @@ up: check-env
 down:
 	 $(COMPOSE_CMD) down
 connect: up
-	 $(COMPOSE_CMD) exec uda-thesis tmux
+	 $(COMPOSE_CMD) exec uda-thesis bash
