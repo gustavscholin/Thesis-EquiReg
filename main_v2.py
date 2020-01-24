@@ -226,7 +226,8 @@ def anneal_sup_loss(sup_logits, sup_labels, sup_loss, global_step, training_summ
 
         sup_loss = sup_loss * loss_mask
         avg_sup_loss = tf.reduce_mean(input_tensor=(tf.reduce_sum(input_tensor=sup_loss, axis=(-1, -2)) /
-                                       tf.maximum(tf.reduce_sum(input_tensor=loss_mask, axis=(-1, -2)), 1)))
+                                                    tf.maximum(tf.reduce_sum(input_tensor=loss_mask, axis=(-1, -2)),
+                                                               1)))
 
     return sup_loss, avg_sup_loss
 
@@ -249,9 +250,12 @@ def class_convert(true_masks, pred_masks, brats_class):
 
 @tf.function
 def dice_coef(true, pred):
-    tp = tf.reduce_sum(input_tensor=tf.cast(tf.logical_and(tf.equal(true, 1), tf.equal(pred, 1)), tf.float32), axis=(-1, -2))
-    fp = tf.reduce_sum(input_tensor=tf.cast(tf.logical_and(tf.equal(true, 0), tf.equal(pred, 1)), tf.float32), axis=(-1, -2))
-    fn = tf.reduce_sum(input_tensor=tf.cast(tf.logical_and(tf.equal(true, 1), tf.equal(pred, 0)), tf.float32), axis=(-1, -2))
+    tp = tf.reduce_sum(input_tensor=tf.cast(tf.logical_and(tf.equal(true, 1), tf.equal(pred, 1)), tf.float32),
+                       axis=(-1, -2))
+    fp = tf.reduce_sum(input_tensor=tf.cast(tf.logical_and(tf.equal(true, 0), tf.equal(pred, 1)), tf.float32),
+                       axis=(-1, -2))
+    fn = tf.reduce_sum(input_tensor=tf.cast(tf.logical_and(tf.equal(true, 1), tf.equal(pred, 0)), tf.float32),
+                       axis=(-1, -2))
 
     dice_coefs = tf.math.divide_no_nan(2 * tp, 2 * tp + fp + fn) + tf.cast(tf.equal(tp + fp + fn, 0), tf.float32)
 
@@ -298,8 +302,9 @@ def get_model_fn():
             labels=sup_masks,
             logits=sup_logits)
         sup_prob = tf.nn.softmax(sup_logits, axis=-1)
-        training_summaries.append(tf.compat.v1.summary.scalar('sup/pred_prob', tf.reduce_mean(input_tensor=tf.reduce_mean(
-            input_tensor=tf.reduce_max(input_tensor=sup_prob, axis=-1), axis=(-1, -2)))))
+        training_summaries.append(
+            tf.compat.v1.summary.scalar('sup/pred_prob', tf.reduce_mean(input_tensor=tf.reduce_mean(
+                input_tensor=tf.reduce_max(input_tensor=sup_prob, axis=-1), axis=(-1, -2)))))
         if FLAGS.tsa and is_training:
             # TODO: Implement TSA
             sup_loss, avg_sup_loss = anneal_sup_loss(sup_logits, sup_masks, sup_loss,
@@ -319,16 +324,19 @@ def get_model_fn():
                 ori_logits_tgt = ori_logits / FLAGS.uda_softmax_temp
             else:
                 ori_logits_tgt = ori_logits
-            ori_logits_aug = tf.compat.v1.py_func(unsup_logits_aug, [ori_logits_tgt, features['seed_sq_ent']], tf.float32,
-                                        stateful=False)
+            ori_logits_aug = tf.compat.v1.py_func(unsup_logits_aug, [ori_logits_tgt, features['seed_sq_ent']],
+                                                  tf.float32,
+                                                  stateful=False)
             ori_logits_aug.set_shape(ori_logits_tgt.shape)
             ori_prob = tf.nn.softmax(ori_logits_aug, axis=-1)
             aug_prob = tf.nn.softmax(aug_logits, axis=-1)
 
-            training_summaries.append(tf.compat.v1.summary.scalar('unsup/ori_prob', tf.reduce_mean(input_tensor=tf.reduce_mean(
-                input_tensor=tf.reduce_max(input_tensor=ori_prob, axis=-1), axis=(-1, -2)))))
-            training_summaries.append(tf.compat.v1.summary.scalar('unsup/aug_prob', tf.reduce_mean(input_tensor=tf.reduce_mean(
-                input_tensor=tf.reduce_max(input_tensor=aug_prob, axis=-1), axis=(-1, -2)))))
+            training_summaries.append(
+                tf.compat.v1.summary.scalar('unsup/ori_prob', tf.reduce_mean(input_tensor=tf.reduce_mean(
+                    input_tensor=tf.reduce_max(input_tensor=ori_prob, axis=-1), axis=(-1, -2)))))
+            training_summaries.append(
+                tf.compat.v1.summary.scalar('unsup/aug_prob', tf.reduce_mean(input_tensor=tf.reduce_mean(
+                    input_tensor=tf.reduce_max(input_tensor=aug_prob, axis=-1), axis=(-1, -2)))))
 
             aug_loss = _kl_divergence_with_logits(
                 p_logits=tf.stop_gradient(ori_logits_aug),
@@ -341,9 +349,12 @@ def get_model_fn():
 
                 aug_loss = aug_loss * loss_mask
                 avg_unsup_loss = tf.reduce_mean(input_tensor=(tf.reduce_sum(input_tensor=aug_loss, axis=(-1, -2)) /
-                                                 tf.maximum(tf.reduce_sum(input_tensor=loss_mask, axis=(-1, -2)), 1)))
+                                                              tf.maximum(
+                                                                  tf.reduce_sum(input_tensor=loss_mask, axis=(-1, -2)),
+                                                                  1)))
 
-                training_summaries.append(tf.compat.v1.summary.image('unsup/loss_mask', tf.expand_dims(loss_mask, -1), 1))
+                training_summaries.append(
+                    tf.compat.v1.summary.image('unsup/loss_mask', tf.expand_dims(loss_mask, -1), 1))
             else:
                 avg_unsup_loss = tf.reduce_mean(input_tensor=tf.reduce_mean(input_tensor=aug_loss, axis=(-1, -2)))
 
@@ -408,7 +419,7 @@ def get_model_fn():
         #     learning_rate = utils.plateau_decay(learning_rate, global_step, eval_dir)
         if FLAGS.exp_lr_decay:
             learning_rate = tf.compat.v1.train.exponential_decay(learning_rate, global_step,
-                                                       params['epoch_steps'], 0.95)
+                                                                 params['epoch_steps'], 0.95)
 
         training_summaries.append(tf.compat.v1.summary.scalar('lr/learning_rate', learning_rate))
 
@@ -514,16 +525,20 @@ def train():
 
     # Training
     if FLAGS.do_eval_along_training:
-        tf.compat.v1.disable_eager_execution()
+        # tf.compat.v1.disable_eager_execution()
 
         tf.compat.v1.logging.info("***** Running training & evaluation *****")
         tf.compat.v1.logging.info("  Supervised batch size = %d", FLAGS.train_batch_size)
         tf.compat.v1.logging.info("  Unsupervised batch size = %d",
-                        FLAGS.train_batch_size * FLAGS.unsup_ratio)
+                                  FLAGS.train_batch_size * FLAGS.unsup_ratio)
         tf.compat.v1.logging.info("  Num train steps = %d", FLAGS.train_steps)
 
+        # serving_input_receiver_fn = tf.estimator.export.build_raw_serving_input_receiver_fn(
+        #     {'image': tf.compat.v1.placeholder(tf.float32, [None, 224, 224, 4], name='input_images')})
+
+        # 7 is arbitrary and will be eliminated
         serving_input_receiver_fn = tf.estimator.export.build_raw_serving_input_receiver_fn(
-            {'image': tf.compat.v1.placeholder(tf.float32, [None, 224, 224, 4], name='input_images')})
+            {'image': tf.zeros([7] + [224, 224, 4], tf.float32)})
 
         best_exporter = tf.estimator.BestExporter(
             name="best_exporter",
@@ -554,7 +569,7 @@ def train():
         tf.estimator.train_and_evaluate(estimator, train_spec, eval_spec)
 
     if FLAGS.do_predict:
-        tf.compat.v1.enable_eager_execution()
+        # tf.compat.v1.enable_eager_execution()
 
         tf.compat.v1.logging.info('***** Running prediction *****')
 
