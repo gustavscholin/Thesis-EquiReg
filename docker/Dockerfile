@@ -10,4 +10,3 @@ RUN useradd ${USER_NAME} -u ${USER_ID} --create-home --shell /bin/bash && \
     echo "$USER_NAME ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/${USER_NAME}
 WORKDIR /home/${USER_NAME}/src
 USER ${USER_NAME}
-CMD ["tmux"]

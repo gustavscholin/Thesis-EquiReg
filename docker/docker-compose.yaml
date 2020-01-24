@@ -12,6 +12,7 @@ services:
     image: uda-thesis
     stdin_open: true
     tty: true
+    command: bash
     runtime: nvidia
     environment:
       - NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES}
