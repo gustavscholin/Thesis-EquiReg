@@ -30,7 +30,7 @@ from models.tiramisu_v2 import DenseTiramisu
 from augmenters import unsup_logits_aug, seg_aug, img_aug
 from prediction_dice import calc_and_export_standard_dice, calc_and_export_consistency_dice
 
-os.environ['KMP_AFFINITY'] = 'disabled'
+# os.environ['KMP_AFFINITY'] = 'disabled'
 # os.environ['KMP_DUPLICATE_LIB_OK']='True'
 
 # UDA config:
