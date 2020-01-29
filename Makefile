@@ -1,6 +1,8 @@
 export USER_ID := $(shell id -u)
 #export COMPOSE_CMD := docker-compose -f docker/docker-compose.yaml -H ssh://gpugpu.bahnhof.plattan.fi
-export COMPOSE_CMD := docker-compose -f docker/docker-compose.yaml
+export PROJ_NAME := uda_thesis_1
+export OUT_PORT := 7777
+export COMPOSE_CMD := docker-compose -f docker/docker-compose.yaml -p ${PROJ_NAME}
 
 check-env:
 ifndef NVIDIA_VISIBLE_DEVICES
