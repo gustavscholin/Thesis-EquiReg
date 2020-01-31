@@ -78,7 +78,8 @@ def get_dataset(type, data_dir, record_spec,
                 }
         elif type == 'unsup':
             ori_image = tf.reshape(example['image'], [224, 224, 4])
-            aug_image, seed_sq_ent = tf.compat.v1.py_func(unsup_img_aug, [ori_image], (tf.float32, tf.string))
+            ori_image, aug_image, seed_sq_ent = tf.compat.v1.py_func(unsup_img_aug, [ori_image], (tf.float32, tf.float32, tf.string))
+            ori_image.set_shape([224, 224, 4])
             aug_image.set_shape([224, 224, 4])
             seed_sq_ent.set_shape([1])
             # TODO: Augmentation on original image?

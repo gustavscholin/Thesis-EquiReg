@@ -3,7 +3,7 @@ import numpy as np
 import imgaug.augmenters as iaa
 
 
-def _get_light_image_augmenter(sq):
+def _get_light_image_augmenter(sq=None):
     aug = iaa.Sequential([
         iaa.Fliplr(0.5, random_state=sq),
         iaa.Flipud(0.5, random_state=sq),
@@ -79,12 +79,16 @@ def sup_aug(in_image, in_seg_mask):
 
 def unsup_img_aug(in_image):
     image = np.copy(in_image)
+
+    light_aug = _get_light_image_augmenter()
+    ori_image = light_aug.augment(image=image)
+
     sq = np.random.SeedSequence()
     aug = _get_image_augmenter(sq)
-    image = aug.augment(image=image)
+    aug_image = aug.augment(image=ori_image)
 
     entropy = np.array([sq.entropy], dtype=np.str)
-    return image, entropy
+    return ori_image, aug_image, entropy
 
 
 def seg_aug(in_segs, entropy):
