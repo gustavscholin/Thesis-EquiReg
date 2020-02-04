@@ -10,7 +10,7 @@ for experiment_nbr in {1..3}; do
     for i in {0..2}; do
       model_dir="/mnt/storage/data/thesis-uda/ckpt/consistency/consistency_${sup_cut[i]}_${unsup_cut[i]}_${experiment_nbr}_seed_${seed}"
 
-      python main_v2.py \
+      python main.py \
         --do_eval_along_training=True \
         --do_predict=False \
         --sup_cut=${sup_cut[i]} \
@@ -30,7 +30,7 @@ for experiment_nbr in {1..3}; do
         --unsup_crop=True \
         --exp_lr_decay=False
 
-      python main_v2.py \
+      python main.py \
         --do_eval_along_training=False \
         --do_predict=True \
         --data_dir=${data_dir} \
@@ -38,7 +38,7 @@ for experiment_nbr in {1..3}; do
         --model_dir=${model_dir} \
         --pred_dataset=val
 
-      python main_v2.py \
+      python main.py \
         --do_eval_along_training=False \
         --do_predict=True \
         --data_dir=${data_dir} \

@@ -9,7 +9,7 @@ train_steps=200000
 model_dir="/mnt/storage/data/thesis-uda/ckpt/baseline_${sup_cut}_${experiment_number}_seed_${seed}"
 data_dir=data/processed_data
 
-python main_v2.py \
+python main.py \
   --do_eval_along_training=True \
   --do_predict=False \
   --sup_cut=${sup_cut} \
@@ -27,7 +27,7 @@ python main_v2.py \
   --min_step=0 \
   --exp_lr_decay=False
 
-python main_v2.py \
+python main.py \
   --do_eval_along_training=False \
   --do_predict=True \
   --data_dir=${data_dir} \
@@ -35,7 +35,7 @@ python main_v2.py \
   --model_dir=${model_dir} \
   --pred_dataset=val
 
-python main_v2.py \
+python main.py \
   --do_eval_along_training=False \
   --do_predict=True \
   --data_dir=${data_dir} \

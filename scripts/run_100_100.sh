@@ -4,7 +4,7 @@ data_dir=data/processed_data
 for experiment_nbr in {1..3}; do
       model_dir="/mnt/storage/data/thesis-uda/ckpt/consistency/consistency_1.0_1.0_${experiment_nbr}"
 
-      python main_v2.py \
+      python main.py \
         --do_eval_along_training=True \
         --do_predict=False \
         --sup_cut=1.0 \
@@ -23,7 +23,7 @@ for experiment_nbr in {1..3}; do
         --unsup_crop=True \
         --exp_lr_decay=False
 
-      python main_v2.py \
+      python main.py \
         --do_eval_along_training=False \
         --do_predict=True \
         --data_dir=${data_dir} \
@@ -31,7 +31,7 @@ for experiment_nbr in {1..3}; do
         --model_dir=${model_dir} \
         --pred_dataset=val
 
-      python main_v2.py \
+      python main.py \
         --do_eval_along_training=False \
         --do_predict=True \
         --data_dir=${data_dir} \

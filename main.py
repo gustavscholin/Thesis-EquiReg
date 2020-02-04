@@ -20,9 +20,9 @@ import json
 import numpy as np
 import tensorflow as tf
 
-import best_ckpt_copier
-import data
-import utils
+import best_ckpt_copier as best_ckpt_copier
+import data as data
+import utils as utils
 import SimpleITK as sitk
 
 from absl import flags
@@ -30,7 +30,8 @@ from models.tiramisu import DenseTiramisu
 from augmenters import unsup_logits_aug, seg_aug, img_aug
 from prediction_dice import calc_and_export_standard_dice, calc_and_export_consistency_dice
 
-os.environ['KMP_AFFINITY'] = 'disabled'
+# os.environ['KMP_AFFINITY'] = 'disabled'
+# os.environ['KMP_DUPLICATE_LIB_OK']='True'
 
 # UDA config:
 flags.DEFINE_float(
@@ -167,11 +168,11 @@ flags.DEFINE_integer(
     "warmup_steps", default=20000,
     help="Number of steps for linear lr warmup.")
 
-FLAGS = tf.flags.FLAGS
+FLAGS = flags.FLAGS
 
 
 def get_tsa_threshold(schedule, global_step, num_train_steps, start, end):
-    step_ratio = tf.to_float(global_step) / tf.to_float(num_train_steps)
+    step_ratio = tf.cast(global_step, dtype=tf.float32) / tf.cast(num_train_steps, dtype=tf.float32)
     if schedule == "linear_schedule":
         coeff = step_ratio
     elif schedule == "exp_schedule":
@@ -190,7 +191,7 @@ def _kl_divergence_with_logits(p_logits, q_logits):
     log_p = tf.nn.log_softmax(p_logits)
     log_q = tf.nn.log_softmax(q_logits)
 
-    kl = tf.reduce_sum(p * (log_p - log_q), -1)
+    kl = tf.reduce_sum(input_tensor=p * (log_p - log_q), axis=-1)
     return kl
 
 
@@ -199,14 +200,14 @@ def anneal_sup_loss(sup_logits, sup_labels, sup_loss, global_step, training_summ
         sup_labels, depth=FLAGS.num_classes, dtype=tf.float32)
     sup_probs = tf.nn.softmax(sup_logits, axis=-1)
     correct_label_probs = tf.reduce_sum(
-        one_hot_labels * sup_probs, axis=-1)
+        input_tensor=one_hot_labels * sup_probs, axis=-1)
 
     if FLAGS.tsa == 'soft':
         loss_mask = 1 - tf.cast(correct_label_probs, tf.float32)
         loss_mask = tf.stop_gradient(loss_mask)
 
         sup_loss = sup_loss * loss_mask
-        avg_sup_loss = tf.reduce_mean(tf.reduce_mean(sup_loss, axis=(-1, -2)))
+        avg_sup_loss = tf.reduce_mean(input_tensor=tf.reduce_mean(input_tensor=sup_loss, axis=(-1, -2)))
     else:
         tsa_start = 1. / FLAGS.num_classes
         eff_train_prob_threshold = get_tsa_threshold(
@@ -219,13 +220,14 @@ def anneal_sup_loss(sup_logits, sup_labels, sup_loss, global_step, training_summ
         loss_mask = tf.stop_gradient(loss_mask)
 
         training_summaries.append(
-            tf.summary.scalar('sup/sup_trained_ratio', tf.reduce_mean(loss_mask)))
+            tf.compat.v1.summary.scalar('sup/sup_trained_ratio', tf.reduce_mean(input_tensor=loss_mask)))
         training_summaries.append(
-            tf.summary.scalar('sup/eff_train_prob_threshold', eff_train_prob_threshold))
+            tf.compat.v1.summary.scalar('sup/eff_train_prob_threshold', eff_train_prob_threshold))
 
         sup_loss = sup_loss * loss_mask
-        avg_sup_loss = tf.reduce_mean((tf.reduce_sum(sup_loss, axis=(-1, -2)) /
-                                       tf.maximum(tf.reduce_sum(loss_mask, axis=(-1, -2)), 1)))
+        avg_sup_loss = tf.reduce_mean(input_tensor=(tf.reduce_sum(input_tensor=sup_loss, axis=(-1, -2)) /
+                                                    tf.maximum(tf.reduce_sum(input_tensor=loss_mask, axis=(-1, -2)),
+                                                               1)))
 
     return sup_loss, avg_sup_loss
 
@@ -243,14 +245,17 @@ def class_convert(true_masks, pred_masks, brats_class):
     bool_true_masks = tf.tensordot(tf.cast(true_masks, tf.float32), brats_class_mapping[brats_class], axes=1)
     bool_pred_masks = tf.tensordot(tf.cast(pred_masks, tf.float32), brats_class_mapping[brats_class], axes=1)
 
-    return tf.tuple([tf.cast(bool_true_masks, tf.int32), tf.cast(bool_pred_masks, tf.int32)])
+    return tf.tuple(tensors=[tf.cast(bool_true_masks, tf.int32), tf.cast(bool_pred_masks, tf.int32)])
 
 
 @tf.function
 def dice_coef(true, pred):
-    tp = tf.reduce_sum(tf.cast(tf.logical_and(tf.equal(true, 1), tf.equal(pred, 1)), tf.float32), axis=(-1, -2))
-    fp = tf.reduce_sum(tf.cast(tf.logical_and(tf.equal(true, 0), tf.equal(pred, 1)), tf.float32), axis=(-1, -2))
-    fn = tf.reduce_sum(tf.cast(tf.logical_and(tf.equal(true, 1), tf.equal(pred, 0)), tf.float32), axis=(-1, -2))
+    tp = tf.reduce_sum(input_tensor=tf.cast(tf.logical_and(tf.equal(true, 1), tf.equal(pred, 1)), tf.float32),
+                       axis=(-1, -2))
+    fp = tf.reduce_sum(input_tensor=tf.cast(tf.logical_and(tf.equal(true, 0), tf.equal(pred, 1)), tf.float32),
+                       axis=(-1, -2))
+    fn = tf.reduce_sum(input_tensor=tf.cast(tf.logical_and(tf.equal(true, 1), tf.equal(pred, 0)), tf.float32),
+                       axis=(-1, -2))
 
     dice_coefs = tf.math.divide_no_nan(2 * tp, 2 * tp + fp + fn) + tf.cast(tf.equal(tp + fp + fn, 0), tf.float32)
 
@@ -262,7 +267,7 @@ def get_model_fn():
         model = DenseTiramisu(growth_k=16, layers_per_block=[4, 5, 7, 10, 12, 15], num_classes=FLAGS.num_classes)
 
         #### Configuring the optimizer
-        global_step = tf.train.get_global_step()
+        global_step = tf.compat.v1.train.get_global_step()
         metric_dict = {}
         training_summaries = []
         is_training = (mode == tf.estimator.ModeKeys.TRAIN)
@@ -273,14 +278,14 @@ def get_model_fn():
         else:
             all_images = features["image"]
 
-        with tf.variable_scope("model", reuse=tf.AUTO_REUSE):
+        with tf.compat.v1.variable_scope("model", reuse=tf.compat.v1.AUTO_REUSE):
             all_logits = model.model(all_images, is_training)
 
-        sup_bsz = tf.shape(features["image"])[0]
+        sup_bsz = tf.shape(input=features["image"])[0]
         sup_logits = all_logits[:sup_bsz]
 
         if mode == tf.estimator.ModeKeys.PREDICT:
-            predictions = tf.argmax(sup_logits, axis=-1, output_type=tf.int32)
+            predictions = tf.argmax(input=sup_logits, axis=-1, output_type=tf.int32)
             output = {
                 'prediction': predictions,
             }
@@ -297,19 +302,20 @@ def get_model_fn():
             labels=sup_masks,
             logits=sup_logits)
         sup_prob = tf.nn.softmax(sup_logits, axis=-1)
-        training_summaries.append(tf.summary.scalar('sup/pred_prob', tf.reduce_mean(tf.reduce_mean(
-            tf.reduce_max(sup_prob, axis=-1), axis=(-1, -2)))))
+        training_summaries.append(
+            tf.compat.v1.summary.scalar('sup/pred_prob', tf.reduce_mean(input_tensor=tf.reduce_mean(
+                input_tensor=tf.reduce_max(input_tensor=sup_prob, axis=-1), axis=(-1, -2)))))
         if FLAGS.tsa and is_training:
             # TODO: Implement TSA
             sup_loss, avg_sup_loss = anneal_sup_loss(sup_logits, sup_masks, sup_loss,
                                                      global_step, training_summaries)
         else:
-            avg_sup_loss = tf.reduce_mean(tf.reduce_mean(sup_loss, axis=(-1, -2)))
+            avg_sup_loss = tf.reduce_mean(input_tensor=tf.reduce_mean(input_tensor=sup_loss, axis=(-1, -2)))
         total_loss = avg_sup_loss
-        training_summaries.append(tf.summary.scalar('sup/loss', avg_sup_loss))
+        training_summaries.append(tf.compat.v1.summary.scalar('sup/loss', avg_sup_loss))
 
         if FLAGS.unsup_ratio > 0 and is_training:
-            aug_bsz = tf.shape(features["ori_image"])[0]
+            aug_bsz = tf.shape(input=features["ori_image"])[0]
 
             ori_logits = all_logits[sup_bsz: sup_bsz + aug_bsz]
             aug_logits = all_logits[sup_bsz + aug_bsz:]
@@ -318,62 +324,68 @@ def get_model_fn():
                 ori_logits_tgt = ori_logits / FLAGS.uda_softmax_temp
             else:
                 ori_logits_tgt = ori_logits
-            ori_logits_aug = tf.py_func(unsup_logits_aug, [ori_logits_tgt, features['seed_sq_ent']], tf.float32,
-                                        stateful=False)
+            ori_logits_aug = tf.compat.v1.py_func(unsup_logits_aug, [ori_logits_tgt, features['seed_sq_ent']],
+                                                  tf.float32,
+                                                  stateful=False)
             ori_logits_aug.set_shape(ori_logits_tgt.shape)
             ori_prob = tf.nn.softmax(ori_logits_aug, axis=-1)
             aug_prob = tf.nn.softmax(aug_logits, axis=-1)
 
-            training_summaries.append(tf.summary.scalar('unsup/ori_prob', tf.reduce_mean(tf.reduce_mean(
-                tf.reduce_max(ori_prob, axis=-1), axis=(-1, -2)))))
-            training_summaries.append(tf.summary.scalar('unsup/aug_prob', tf.reduce_mean(tf.reduce_mean(
-                tf.reduce_max(aug_prob, axis=-1), axis=(-1, -2)))))
+            training_summaries.append(
+                tf.compat.v1.summary.scalar('unsup/ori_prob', tf.reduce_mean(input_tensor=tf.reduce_mean(
+                    input_tensor=tf.reduce_max(input_tensor=ori_prob, axis=-1), axis=(-1, -2)))))
+            training_summaries.append(
+                tf.compat.v1.summary.scalar('unsup/aug_prob', tf.reduce_mean(input_tensor=tf.reduce_mean(
+                    input_tensor=tf.reduce_max(input_tensor=aug_prob, axis=-1), axis=(-1, -2)))))
 
             aug_loss = _kl_divergence_with_logits(
                 p_logits=tf.stop_gradient(ori_logits_aug),
                 q_logits=aug_logits)
 
             if FLAGS.unsup_crop:
-                aug_image_sum = tf.reduce_sum(features['aug_image'], axis=-1)
+                aug_image_sum = tf.reduce_sum(input_tensor=features['aug_image'], axis=-1)
                 loss_mask = tf.cast(tf.not_equal(aug_image_sum, tf.zeros(aug_image_sum.shape)), tf.float32)
                 loss_mask = tf.stop_gradient(loss_mask)
 
                 aug_loss = aug_loss * loss_mask
-                avg_unsup_loss = tf.reduce_mean((tf.reduce_sum(aug_loss, axis=(-1, -2)) /
-                                                 tf.maximum(tf.reduce_sum(loss_mask, axis=(-1, -2)), 1)))
+                avg_unsup_loss = tf.reduce_mean(input_tensor=(tf.reduce_sum(input_tensor=aug_loss, axis=(-1, -2)) /
+                                                              tf.maximum(
+                                                                  tf.reduce_sum(input_tensor=loss_mask, axis=(-1, -2)),
+                                                                  1)))
 
-                training_summaries.append(tf.summary.image('unsup/loss_mask', tf.expand_dims(loss_mask, -1), 1))
+                training_summaries.append(
+                    tf.compat.v1.summary.image('unsup/loss_mask', tf.expand_dims(loss_mask, -1), 1))
             else:
-                avg_unsup_loss = tf.reduce_mean(tf.reduce_mean(aug_loss, axis=(-1, -2)))
+                avg_unsup_loss = tf.reduce_mean(input_tensor=tf.reduce_mean(input_tensor=aug_loss, axis=(-1, -2)))
 
             total_loss += FLAGS.unsup_coeff * avg_unsup_loss
-            training_summaries.append(tf.summary.scalar('unsup/loss', avg_unsup_loss))
+            training_summaries.append(tf.compat.v1.summary.scalar('unsup/loss', avg_unsup_loss))
 
         # total_loss = utils.decay_weights(
         #    total_loss,
         #    FLAGS.weight_decay_rate)
 
         #### Check model parameters
-        num_params = sum([np.prod(v.shape) for v in tf.trainable_variables()])
-        tf.logging.info("#params: {}".format(num_params))
+        num_params = sum([np.prod(v.shape) for v in tf.compat.v1.trainable_variables()])
+        tf.compat.v1.logging.info("#params: {}".format(num_params))
 
         if FLAGS.verbose:
             format_str = "{{:<{0}s}}\t{{}}".format(
-                max([len(v.name) for v in tf.trainable_variables()]))
-            for v in tf.trainable_variables():
-                tf.logging.info(format_str.format(v.name, v.get_shape()))
+                max([len(v.name) for v in tf.compat.v1.trainable_variables()]))
+            for v in tf.compat.v1.trainable_variables():
+                tf.compat.v1.logging.info(format_str.format(v.name, v.get_shape()))
 
         #### Evaluation mode
         if mode == tf.estimator.ModeKeys.EVAL:
-            predictions = tf.argmax(sup_logits, axis=-1, output_type=tf.int32)
+            predictions = tf.argmax(input=sup_logits, axis=-1, output_type=tf.int32)
 
-            loss = tf.metrics.mean(tf.reduce_mean(sup_loss, axis=(-1, -2)))
+            loss = tf.compat.v1.metrics.mean(tf.reduce_mean(input_tensor=sup_loss, axis=(-1, -2)))
 
             brats_classes = ['whole', 'core', 'enhancing']
             dice_scores = {}
             for brats_class in brats_classes:
                 true, pred = class_convert(sup_masks, predictions, brats_class)
-                dice_scores[brats_class] = tf.metrics.mean(dice_coef(true, pred))
+                dice_scores[brats_class] = tf.compat.v1.metrics.mean(dice_coef(true, pred))
 
             eval_metrics = {
                 "eval/classify_loss": loss,
@@ -383,14 +395,14 @@ def get_model_fn():
             }
 
             if FLAGS.plot_eval_images:
-                tf.summary.image('eval/input', tf.expand_dims(all_images[..., 0], -1), 2)
-                tf.summary.image('eval/gt_mask', tf.cast(tf.expand_dims(sup_masks, -1), tf.float32), 2)
-                tf.summary.image('eval/pred_mask', tf.cast(tf.expand_dims(predictions, -1), tf.float32), 2)
+                tf.compat.v1.summary.image('eval/input', tf.expand_dims(all_images[..., 0], -1), 2)
+                tf.compat.v1.summary.image('eval/gt_mask', tf.cast(tf.expand_dims(sup_masks, -1), tf.float32), 2)
+                tf.compat.v1.summary.image('eval/pred_mask', tf.cast(tf.expand_dims(predictions, -1), tf.float32), 2)
 
-            eval_summary_hook = tf.train.SummarySaverHook(
+            eval_summary_hook = tf.estimator.SummarySaverHook(
                 save_secs=120,
                 output_dir=FLAGS.model_dir,
-                summary_op=tf.summary.merge_all())
+                summary_op=tf.compat.v1.summary.merge_all())
 
             #### Constucting evaluation TPUEstimatorSpec.
             eval_spec = tf.estimator.EstimatorSpec(
@@ -406,25 +418,25 @@ def get_model_fn():
         # if FLAGS.dec_lr_on_plateau:
         #     learning_rate = utils.plateau_decay(learning_rate, global_step, eval_dir)
         if FLAGS.exp_lr_decay:
-            learning_rate = tf.train.exponential_decay(learning_rate, global_step,
-                                                       params['epoch_steps'], 0.95)
+            learning_rate = tf.compat.v1.train.exponential_decay(learning_rate, global_step,
+                                                                 params['epoch_steps'], 0.95)
 
-        training_summaries.append(tf.summary.scalar('lr/learning_rate', learning_rate))
+        training_summaries.append(tf.compat.v1.summary.scalar('lr/learning_rate', learning_rate))
 
-        optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
+        optimizer = tf.compat.v1.train.AdamOptimizer(learning_rate=learning_rate)
 
         grads_and_vars = optimizer.compute_gradients(total_loss)
         gradients, variables = zip(*grads_and_vars)
-        update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+        update_ops = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.UPDATE_OPS)
         with tf.control_dependencies(update_ops):
             train_op = optimizer.apply_gradients(
-                zip(gradients, variables), global_step=tf.train.get_global_step())
+                zip(gradients, variables), global_step=tf.compat.v1.train.get_global_step())
 
         #### Creating training logging hook
         # compute accuracy
-        sup_pred = tf.argmax(sup_logits, axis=-1, output_type=sup_masks.dtype)
-        is_correct = tf.to_float(tf.equal(sup_pred, sup_masks))
-        acc = tf.reduce_mean(is_correct)
+        sup_pred = tf.argmax(input=sup_logits, axis=-1, output_type=sup_masks.dtype)
+        is_correct = tf.cast(tf.equal(sup_pred, sup_masks), dtype=tf.float32)
+        acc = tf.reduce_mean(input_tensor=is_correct)
         metric_dict["sup/sup_loss"] = avg_sup_loss
         metric_dict["training/loss"] = total_loss
         metric_dict["sup/acc"] = acc
@@ -438,24 +450,24 @@ def get_model_fn():
             metric_dict["unsup/loss"] = avg_unsup_loss
             log_info += "unsup/loss {unsup/loss:.6f} "
         formatter = lambda kwargs: log_info.format(**kwargs)
-        logging_hook = tf.train.LoggingTensorHook(
+        logging_hook = tf.estimator.LoggingTensorHook(
             tensors=metric_dict,
             every_n_iter=FLAGS.train_summary_steps,
             formatter=formatter)
 
         if FLAGS.unsup_ratio > 0 and FLAGS.plot_train_images:
             training_summaries.append(
-                tf.summary.image('unsup/ori_image', tf.expand_dims(features['ori_image'][..., 0], -1), 1))
+                tf.compat.v1.summary.image('unsup/ori_image', tf.expand_dims(features['ori_image'][..., 0], -1), 1))
             training_summaries.append(
-                tf.summary.image('unsup/aug_image', tf.expand_dims(features['aug_image'][..., 0], -1), 1))
-            training_summaries.append(tf.summary.image('unsup/ori_mask', tf.cast(
-                tf.expand_dims(tf.argmax(ori_logits_aug, axis=-1, output_type=tf.int32), -1),
+                tf.compat.v1.summary.image('unsup/aug_image', tf.expand_dims(features['aug_image'][..., 0], -1), 1))
+            training_summaries.append(tf.compat.v1.summary.image('unsup/ori_mask', tf.cast(
+                tf.expand_dims(tf.argmax(input=ori_logits_aug, axis=-1, output_type=tf.int32), -1),
                 tf.float32), 1))
-            training_summaries.append(tf.summary.image('unsup/aug_mask', tf.cast(
-                tf.expand_dims(tf.argmax(aug_logits, axis=-1, output_type=tf.int32), -1),
+            training_summaries.append(tf.compat.v1.summary.image('unsup/aug_mask', tf.cast(
+                tf.expand_dims(tf.argmax(input=aug_logits, axis=-1, output_type=tf.int32), -1),
                 tf.float32), 1))
 
-            training_summary_hook = tf.train.SummarySaverHook(
+            training_summary_hook = tf.estimator.SummarySaverHook(
                 save_steps=FLAGS.train_summary_steps,
                 output_dir=FLAGS.model_dir,
                 summary_op=training_summaries
@@ -476,7 +488,7 @@ def get_model_fn():
 
 def train():
     # Create input function
-    with tf.gfile.Open(os.path.join(FLAGS.data_dir, 'data_info.json'), 'r') as fp:
+    with tf.io.gfile.GFile(os.path.join(FLAGS.data_dir, 'data_info.json'), 'r') as fp:
         data_info = json.load(fp)
     if FLAGS.unsup_ratio == 0:
         FLAGS.unsup_cut = 0.0
@@ -513,14 +525,20 @@ def train():
 
     # Training
     if FLAGS.do_eval_along_training:
-        tf.logging.info("***** Running training & evaluation *****")
-        tf.logging.info("  Supervised batch size = %d", FLAGS.train_batch_size)
-        tf.logging.info("  Unsupervised batch size = %d",
-                        FLAGS.train_batch_size * FLAGS.unsup_ratio)
-        tf.logging.info("  Num train steps = %d", FLAGS.train_steps)
+        # tf.compat.v1.disable_eager_execution()
 
+        tf.compat.v1.logging.info("***** Running training & evaluation *****")
+        tf.compat.v1.logging.info("  Supervised batch size = %d", FLAGS.train_batch_size)
+        tf.compat.v1.logging.info("  Unsupervised batch size = %d",
+                                  FLAGS.train_batch_size * FLAGS.unsup_ratio)
+        tf.compat.v1.logging.info("  Num train steps = %d", FLAGS.train_steps)
+
+        # serving_input_receiver_fn = tf.estimator.export.build_raw_serving_input_receiver_fn(
+        #     {'image': tf.compat.v1.placeholder(tf.float32, [None, 224, 224, 4], name='input_images')})
+
+        # 7 is arbitrary and will be eliminated
         serving_input_receiver_fn = tf.estimator.export.build_raw_serving_input_receiver_fn(
-            {'image': tf.placeholder(tf.float32, [None, 224, 224, 4], name='input_images')})
+            {'image': tf.zeros([7] + [224, 224, 4], tf.float32)})
 
         best_exporter = tf.estimator.BestExporter(
             name="best_exporter",
@@ -551,9 +569,9 @@ def train():
         tf.estimator.train_and_evaluate(estimator, train_spec, eval_spec)
 
     if FLAGS.do_predict:
-        tf.enable_eager_execution()
+        # tf.compat.v1.enable_eager_execution()
 
-        tf.logging.info('***** Running prediction *****')
+        tf.compat.v1.logging.info('***** Running prediction *****')
 
         with open('data/processed_data/aug_seed.json', 'r') as fp:
             aug_seeds_dict = json.load(fp)
@@ -569,10 +587,10 @@ def train():
         if not os.path.exists(out_path):
             os.makedirs(out_path)
 
-        model = tf.saved_model.load_v2(export_dir)
+        model = tf.compat.v2.saved_model.load(export_dir)
         predict = model.signatures["serving_default"]
 
-        tf.logging.info('Predicting images')
+        tf.compat.v1.logging.info('Predicting images')
 
         test_input_fn = data.get_input_fn(
             data_dir=FLAGS.data_dir,
@@ -585,7 +603,7 @@ def train():
         )
 
         dataset = test_input_fn()
-        iterator = dataset.make_one_shot_iterator()
+        iterator = tf.compat.v1.data.make_one_shot_iterator(dataset)
 
         preds = []
         aug_preds = []
@@ -610,7 +628,7 @@ def train():
             patient_pred_nii = sitk.GetImageFromArray(patient_pred)
             sitk.WriteImage(patient_pred_nii, os.path.join(out_path, mode, '{}.nii.gz'.format(patient_id)))
 
-            tf.logging.info('Exported patient {}'.format(patient_id))
+            tf.compat.v1.logging.info('Exported patient {}'.format(patient_id))
 
         for sample in iterator:
             imgs = sample['image'].numpy()
@@ -652,23 +670,23 @@ def train():
             img_cnt += imgs.shape[0]
 
         if FLAGS.pred_dataset == 'val':
-            tf.logging.info('Calculating standard Dice scores')
+            tf.compat.v1.logging.info('Calculating standard Dice scores')
             calc_and_export_standard_dice(os.path.join(out_path, 'standard'))
 
-        tf.logging.info('Calculating consistency Dice scores')
+        tf.compat.v1.logging.info('Calculating consistency Dice scores')
         calc_and_export_consistency_dice(os.path.join(out_path, 'pred_aug'), os.path.join(out_path, 'aug_pred'))
 
 
 def main(_):
     if FLAGS.do_eval_along_training:
-        tf.gfile.MakeDirs(FLAGS.model_dir)
-        flags_dict = tf.app.flags.FLAGS.flag_values_dict()
-        with tf.gfile.Open(os.path.join(FLAGS.model_dir, "FLAGS.json"), "w") as ouf:
-            json.dump(flags_dict, ouf, indent=4)
+        tf.io.gfile.makedirs(FLAGS.model_dir)
+        flags_txt = FLAGS.flags_into_string()
+        with tf.io.gfile.GFile(os.path.join(FLAGS.model_dir, "FLAGS.txt"), "w") as ouf:
+            ouf.write(flags_txt)
 
     train()
 
 
 if __name__ == "__main__":
-    tf.logging.set_verbosity(tf.logging.INFO)
-    tf.app.run()
+    tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.INFO)
+    tf.compat.v1.app.run()

@@ -14,10 +14,10 @@
 # limitations under the License.
 """Loading module of CIFAR && SVHN."""
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-from __future__ import unicode_literals
+# from __future__ import absolute_import
+# from __future__ import division
+# from __future__ import print_function
+# from __future__ import unicode_literals
 
 import math
 import os
@@ -39,7 +39,7 @@ def natural_sort(l):
 
 def get_file_list(data_dir, split):
     file_prefix = '{}_data.tfrecord'.format(split)
-    file_list = natural_sort(tf.gfile.Glob(os.path.join(data_dir, split, file_prefix + '*')))
+    file_list = natural_sort(tf.io.gfile.glob(os.path.join(data_dir, split, file_prefix + '*')))
     return file_list
 
 
@@ -50,7 +50,7 @@ def _postprocess_example(example):
         if tf.keras.backend.is_sparse(val):
             val = tf.sparse.to_dense(val)
         if val.dtype == tf.int64:
-            val = tf.to_int32(val)
+            val = tf.cast(val, dtype=tf.int32)
         example[key] = val
 
 
@@ -60,7 +60,7 @@ def get_dataset(type, data_dir, record_spec,
 
     def parser(record):
         # retrieve serialized example
-        example = tf.parse_single_example(
+        example = tf.io.parse_single_example(
             serialized=record,
             features=record_spec)
         # reshape image back to 3D shape
@@ -69,7 +69,7 @@ def get_dataset(type, data_dir, record_spec,
             if 'test' not in split:
                 example['seg_mask'] = tf.reshape(example['seg_mask'], [224, 224])
             if is_training:
-                image, seg_mask = tf.py_func(sup_aug, [example['image'], example['seg_mask']], (tf.float32, tf.int32))
+                image, seg_mask = tf.compat.v1.py_func(sup_aug, [example['image'], example['seg_mask']], (tf.float32, tf.int32))
                 image.set_shape([224, 224, 4])
                 seg_mask.set_shape([224, 224])
                 example = {
@@ -78,7 +78,8 @@ def get_dataset(type, data_dir, record_spec,
                 }
         elif type == 'unsup':
             ori_image = tf.reshape(example['image'], [224, 224, 4])
-            aug_image, seed_sq_ent = tf.py_func(unsup_img_aug, [ori_image], (tf.float32, tf.string))
+            ori_image, aug_image, seed_sq_ent = tf.compat.v1.py_func(unsup_img_aug, [ori_image], (tf.float32, tf.float32, tf.string))
+            ori_image.set_shape([224, 224, 4])
             aug_image.set_shape([224, 224, 4])
             seed_sq_ent.set_shape([1])
             # TODO: Augmentation on original image?
@@ -131,10 +132,10 @@ def get_input_fn(
         datasets = []
 
         record_spec = {
-            'image': tf.FixedLenFeature([224 * 224 * 4], tf.float32)
+            'image': tf.io.FixedLenFeature([224 * 224 * 4], tf.float32)
         }
         if 'test' not in split:
-            record_spec['seg_mask'] = tf.FixedLenFeature([224 * 224], tf.int64)
+            record_spec['seg_mask'] = tf.io.FixedLenFeature([224 * 224], tf.int64)
 
         # Supervised data
         if sup_cut > 0:

@@ -7,7 +7,7 @@ for experiment_number in {1..3}; do
     for i in {0..3}; do
       model_dir="/mnt/storage/data/thesis-uda/ckpt/baseline/baseline_${sup_cuts[i]}_${experiment_number}_seed_${seed}"
 
-      python main_v2.py \
+      python main.py \
         --do_eval_along_training=False \
         --do_predict=True \
         --data_dir=${data_dir} \
