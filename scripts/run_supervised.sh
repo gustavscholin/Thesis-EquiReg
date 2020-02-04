@@ -34,3 +34,11 @@ python main_v2.py \
   --eval_batch_size=16 \
   --model_dir=${model_dir} \
   --pred_dataset=val
+
+python main_v2.py \
+  --do_eval_along_training=False \
+  --do_predict=True \
+  --data_dir=${data_dir} \
+  --eval_batch_size=16 \
+  --model_dir=${model_dir} \
+  --pred_dataset=test

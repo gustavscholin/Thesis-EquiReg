@@ -1,5 +1,5 @@
 #!/bin/bash
-python main.py \
+python main_v2.py \
   --do_eval_along_training=False \
   --do_predict=True \
   --data_dir=data/processed_data \

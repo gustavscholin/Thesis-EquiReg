@@ -37,6 +37,14 @@ for experiment_nbr in {1..3}; do
         --eval_batch_size=16 \
         --model_dir=${model_dir} \
         --pred_dataset=val
+
+      python main_v2.py \
+        --do_eval_along_training=False \
+        --do_predict=True \
+        --data_dir=${data_dir} \
+        --eval_batch_size=16 \
+        --model_dir=${model_dir} \
+        --pred_dataset=test
     done
   done
 done
