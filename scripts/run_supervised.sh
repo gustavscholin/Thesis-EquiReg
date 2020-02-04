@@ -4,9 +4,9 @@ experiment_number=1
 seed=42
 save_steps=500
 early_stop_steps=20000
-batch_size=1
+batch_size=2
 train_steps=200000
-model_dir="ckpt/baseline_${sup_cut}_${experiment_number}_seed_${seed}"
+model_dir="/mnt/storage/data/thesis-uda/ckpt/baseline_${sup_cut}_${experiment_number}_seed_${seed}"
 data_dir=data/processed_data
 
 python main_v2.py \
@@ -17,6 +17,7 @@ python main_v2.py \
   --unsup_ratio=0 \
   --shuffle_seed=${seed} \
   --train_batch_size=${batch_size} \
+  --eval_batch_size=14 \
   --train_steps=${train_steps} \
   --save_steps=${save_steps} \
   --max_save=1 \

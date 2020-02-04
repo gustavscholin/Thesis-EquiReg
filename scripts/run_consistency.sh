@@ -8,17 +8,18 @@ early_stop_steps=(10000 20000 30000)
 for experiment_nbr in {1..3}; do
   for seed in {42..44}; do
     for i in {0..2}; do
-      model_dir="ckpt/consistency/consistency_${sup_cut[i]}_${unsup_cut[i]}_${experiment_nbr}_seed_${seed}"
+      model_dir="/mnt/storage/data/thesis-uda/ckpt/consistency/consistency_${sup_cut[i]}_${unsup_cut[i]}_${experiment_nbr}_seed_${seed}"
 
-      python main.py \
+      python main_v2.py \
         --do_eval_along_training=True \
         --do_predict=False \
         --sup_cut=${sup_cut[i]} \
         --unsup_cut=${unsup_cut[i]} \
-        --unsup_ratio=2 \
+        --unsup_ratio=3 \
         --shuffle_seed=${seed} \
-        --train_batch_size=1 \
-        --train_steps=100000 \
+        --train_batch_size=2 \
+        --eval_batch_size=14 \
+        --train_steps=200000 \
         --max_save=1 \
         --data_dir=${data_dir} \
         --model_dir=${model_dir} \
@@ -29,7 +30,7 @@ for experiment_nbr in {1..3}; do
         --unsup_crop=True \
         --exp_lr_decay=False
 
-      python main.py \
+      python main_v2.py \
         --do_eval_along_training=False \
         --do_predict=True \
         --data_dir=${data_dir} \
