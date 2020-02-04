@@ -19,3 +19,4 @@ services:
       - TF_FORCE_GPU_ALLOW_GROWTH=true
     volumes:
       - ..:/home/${USER}/src
+      - /mnt/storage/data/thesis-uda:/mnt/storage/data/thesis-uda
