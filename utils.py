@@ -1,112 +1,34 @@
-# coding=utf-8
-# Copyright 2019 The Google UDA Team Authors.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 """Helper functions."""
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import tensorflow as tf
-import numpy as np
-import os
-import collections
 
 
-def _summaries(eval_dir):
-    """Yields `tensorflow.Event` protos from event files in the eval dir.
+def collective_dice_smaller(best_eval_result, current_eval_result):
+  """Compares two evaluation results and returns true if the 2nd one is smaller.
 
-  Args:
-    eval_dir: Directory containing summary files with eval metrics.
-
-  Yields:
-    `tensorflow.Event` object read from the event files.
-  """
-    if tf.io.gfile.exists(eval_dir):
-        for event_file in tf.io.gfile.glob(
-                os.path.join(eval_dir, 'events.out.tfevents.*')):
-            for event in tf.compat.v1.train.summary_iterator(event_file):
-                yield event
-
-
-def read_eval_metrics(eval_dir):
-    """Helper to read eval metrics from eval summary files.
+  Both evaluation results should have the values for MetricKeys.LOSS, which are
+  used for comparison.
 
   Args:
-    eval_dir: Directory containing summary files with eval metrics.
+    best_eval_result: best eval metrics.
+    current_eval_result: current eval metrics.
 
   Returns:
-    A `dict` with global steps mapping to `dict` of metric names and values.
+    True if the loss of current_eval_result is smaller; otherwise, False.
+
+  Raises:
+    ValueError: If input eval result is None or no loss is available.
   """
-    eval_metrics_dict = collections.defaultdict(dict)
-    for event in _summaries(eval_dir):
-        if not event.HasField('summary'):
-            continue
-        metrics = {}
-        for value in event.summary.value:
-            if value.HasField('simple_value'):
-                metrics[value.tag] = value.simple_value
-        if metrics:
-            eval_metrics_dict[event.step].update(metrics)
-    return collections.OrderedDict(
-        sorted(eval_metrics_dict.items(), key=lambda t: t[0]))
+  default_key = 'eval/classify_collective_dice'
+  if not best_eval_result or default_key not in best_eval_result:
+    raise ValueError(
+        'best_eval_result cannot be empty or no loss is found in it.')
 
+  if not current_eval_result or default_key not in current_eval_result:
+    raise ValueError(
+        'current_eval_result cannot be empty or no loss is found in it.')
 
-# def plateau_decay(learning_rate, global_step, eval_dir, factor=0.5, patience=6000, min_delta=0,
-#                   cooldown=0, min_lr=0):
-#
-#     if not isinstance(learning_rate, tf.Tensor):
-#         learning_rate = tf.compat.v1.get_variable('learning_rate', initializer=tf.constant(learning_rate), trainable=False,
-#                                         collections=[tf.compat.v1.GraphKeys.LOCAL_VARIABLES])
-#
-#     eval_results = read_eval_metrics(eval_dir)
-#     if eval_results:
-#         loss = tf.constant(eval_results[next(reversed(eval_results))]['loss'])
-#     else:
-#         return tf.identity(learning_rate)
-#
-#     with tf.compat.v1.variable_scope('plateau_decay'):
-#         step = tf.compat.v1.get_variable('step', trainable=False, initializer=global_step,
-#                                collections=[tf.compat.v1.GraphKeys.LOCAL_VARIABLES])
-#         best = tf.compat.v1.get_variable('best', trainable=False, initializer=tf.constant(np.Inf, tf.float32),
-#                                collections=[tf.compat.v1.GraphKeys.LOCAL_VARIABLES])
-#
-#         def _update_best():
-#             with tf.control_dependencies([
-#                 tf.compat.v1.assign(best, loss),
-#                 tf.compat.v1.assign(step, global_step),
-#                 tf.print('!!!!!!!!!!!!!!!!!!!!!!!Plateau Decay: Updated Best - Step:', global_step, 'Next Decay Step:',
-#                          global_step + patience, 'Loss:', loss, '!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
-#             ]):
-#                 return tf.identity(learning_rate)
-#
-#         def _decay():
-#             with tf.control_dependencies([
-#                 tf.compat.v1.assign(best, loss),
-#                 tf.compat.v1.assign(learning_rate, tf.maximum(tf.multiply(learning_rate, factor), min_lr)),
-#                 tf.compat.v1.assign(step, global_step + cooldown),
-#                 tf.print('!!!!!!!!!!!!!!!!!!!!!!!!!!Plateau Decay: Decayed LR - Step:', global_step, 'Next Decay Step:',
-#                          global_step + cooldown + patience, 'Learning Rate:', learning_rate, '!!!!!!!!!!!!!!!!!!!!!!!!')
-#             ]):
-#                 return tf.identity(learning_rate)
-#
-#         def _no_op(): return tf.identity(learning_rate)
-#
-#         met_threshold = tf.less(loss, best - min_delta)
-#         should_decay = tf.greater_equal(global_step - step, patience)
-#
-#         return tf.cond(pred=met_threshold, true_fn=_update_best, false_fn=lambda: tf.cond(pred=should_decay, true_fn=_decay, false_fn=_no_op))
+  return best_eval_result[default_key] > current_eval_result[default_key]
 
 
 def decay_weights(cost, weight_decay_rate):
