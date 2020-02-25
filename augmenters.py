@@ -1,72 +1,74 @@
 import numpy as np
-# np.random.bit_generator = np.random._bit_generator
 import imgaug.augmenters as iaa
 
 
-def _get_light_image_augmenter(sq=None):
+def _get_light_image_augmenter(sq=np.random.SeedSequence()):
+    seeds = sq.generate_state(5)
     aug = iaa.Sequential([
-        iaa.Fliplr(0.5, random_state=sq),
-        iaa.Flipud(0.5, random_state=sq),
-        iaa.Affine(translate_percent={"x": (-0.1, 0.1)}, random_state=sq),
-        iaa.Affine(translate_percent={"y": (-0.1, 0.1)}, random_state=sq)
-    ], random_order=True, random_state=sq)
+        iaa.Fliplr(0.5, random_state=seeds[0]),
+        iaa.Flipud(0.5, random_state=seeds[1]),
+        iaa.Affine(translate_percent={"x": (-0.1, 0.1)}, random_state=seeds[2]),
+        iaa.Affine(translate_percent={"y": (-0.1, 0.1)}, random_state=seeds[3])
+    ], random_order=True, random_state=seeds[4])
 
     aug = aug.to_deterministic()
     return aug
 
 
 def _get_light_seg_mask_augmenter(sq):
+    seeds = sq.generate_state(5)
     aug = iaa.Sequential([
-        iaa.Fliplr(0.5, random_state=sq),
-        iaa.Flipud(0.5, random_state=sq),
-        iaa.Affine(translate_percent={"x": (-0.1, 0.1)}, random_state=sq, order=0),
-        iaa.Affine(translate_percent={"y": (-0.1, 0.1)}, random_state=sq, order=0)
-    ], random_order=True, random_state=sq)
+        iaa.Fliplr(0.5, random_state=seeds[0]),
+        iaa.Flipud(0.5, random_state=seeds[1]),
+        iaa.Affine(translate_percent={"x": (-0.1, 0.1)}, random_state=seeds[2], order=0),
+        iaa.Affine(translate_percent={"y": (-0.1, 0.1)}, random_state=seeds[3], order=0)
+    ], random_order=True, random_state=seeds[4])
 
     aug = aug.to_deterministic()
     return aug
 
 
 def _get_image_augmenter(sq):
+    seeds = sq.generate_state(9)
     shear_degrees = np.degrees(np.arctan(0.2))
     aug = iaa.SomeOf((3, None), [
-        iaa.Fliplr(0.5, random_state=sq),
-        iaa.Flipud(0.5, random_state=sq),
-        iaa.Affine(rotate=(-20, 20), random_state=sq),
-        iaa.Affine(translate_percent={"x": (-0.1, 0.1)}, random_state=sq),
-        iaa.Affine(translate_percent={"y": (-0.1, 0.1)}, random_state=sq),
-        iaa.Affine(shear=(-shear_degrees, shear_degrees), random_state=sq),
-        iaa.Affine(scale=(0.9, 1.1), random_state=sq),
-        # iaa.GammaContrast((0.8, 1.2), random_state=sq),
-        iaa.ElasticTransformation(alpha=720, sigma=24, random_state=sq)
-    ], random_order=True, random_state=sq)
+        iaa.Fliplr(0.5, random_state=seeds[0]),
+        iaa.Flipud(0.5, random_state=seeds[1]),
+        iaa.Affine(rotate=(-20, 20), random_state=seeds[2]),
+        iaa.Affine(translate_percent={"x": (-0.1, 0.1)}, random_state=seeds[3]),
+        iaa.Affine(translate_percent={"y": (-0.1, 0.1)}, random_state=seeds[4]),
+        iaa.Affine(shear=(-shear_degrees, shear_degrees), random_state=seeds[5]),
+        iaa.Affine(scale=(0.9, 1.1), random_state=seeds[6]),
+        iaa.ElasticTransformation(alpha=720, sigma=24, random_state=seeds[7])
+    ], random_order=True, random_state=seeds[8])
 
     aug = aug.to_deterministic()
     return aug
 
 
 def _get_seg_mask_augmenter(sq):
+    seeds = sq.generate_state(9)
     shear_degrees = np.degrees(np.arctan(0.2))
     aug = iaa.SomeOf((3, None), [
-        iaa.Fliplr(0.5, random_state=sq),
-        iaa.Flipud(0.5, random_state=sq),
-        iaa.Affine(rotate=(-20, 20), random_state=sq, order=0),
-        iaa.Affine(translate_percent={"x": (-0.1, 0.1)}, random_state=sq, order=0),
-        iaa.Affine(translate_percent={"y": (-0.1, 0.1)}, random_state=sq, order=0),
-        iaa.Affine(shear=(-shear_degrees, shear_degrees), random_state=sq, order=0),
-        iaa.Affine(scale=(0.9, 1.1), random_state=sq, order=0),
-        # iaa.GammaContrast((0.8, 1.2), random_state=sq),
-        iaa.ElasticTransformation(alpha=720, sigma=24, random_state=sq, order=0)
-    ], random_order=True, random_state=sq)
+        iaa.Fliplr(0.5, random_state=seeds[0]),
+        iaa.Flipud(0.5, random_state=seeds[1]),
+        iaa.Affine(rotate=(-20, 20), random_state=seeds[2], order=0),
+        iaa.Affine(translate_percent={"x": (-0.1, 0.1)}, random_state=seeds[3], order=0),
+        iaa.Affine(translate_percent={"y": (-0.1, 0.1)}, random_state=seeds[4], order=0),
+        iaa.Affine(shear=(-shear_degrees, shear_degrees), random_state=seeds[5], order=0),
+        iaa.Affine(scale=(0.9, 1.1), random_state=seeds[6], order=0),
+        iaa.ElasticTransformation(alpha=720, sigma=24, random_state=seeds[7], order=0)
+    ], random_order=True, random_state=seeds[8])
 
     aug = aug.to_deterministic()
     return aug
 
 
-def sup_aug(in_image, in_seg_mask):
+def sup_aug(in_image, in_seg_mask, entropy=None):
     image = np.copy(in_image)
     seg_mask = np.copy(in_seg_mask.astype(np.int32))
-    sq = np.random.SeedSequence()
+
+    sq = np.random.SeedSequence(entropy)
 
     img_aug = _get_light_image_augmenter(sq)
     seg_mask_aug = _get_light_seg_mask_augmenter(sq)
