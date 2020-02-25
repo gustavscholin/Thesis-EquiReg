@@ -383,15 +383,22 @@ def get_model_fn():
 
             brats_classes = ['whole', 'core', 'enhancing']
             dice_scores = {}
+            dice_collective = tf.zeros((predictions.shape[0]))
+
             for brats_class in brats_classes:
                 true, pred = class_convert(sup_masks, predictions, brats_class)
-                dice_scores[brats_class] = tf.compat.v1.metrics.mean(dice_coef(true, pred))
+                dice_score = dice_coef(true, pred)
+                dice_scores[brats_class] = tf.compat.v1.metrics.mean(dice_score)
+                dice_collective = tf.add(dice_collective, dice_score)
+
+            dice_collective = tf.compat.v1.metrics.mean(tf.divide(dice_collective, 3))
 
             eval_metrics = {
                 "eval/classify_loss": loss,
                 "eval/classify_whole_dice": dice_scores['whole'],
                 "eval/classify_core_dice": dice_scores['core'],
-                "eval/classify_enhancing_dice": dice_scores['enhancing']
+                "eval/classify_enhancing_dice": dice_scores['enhancing'],
+                "eval/classify_collective_dice": dice_collective
             }
 
             if FLAGS.plot_eval_images:
@@ -558,8 +565,9 @@ def train():
         hooks = []
 
         if FLAGS.early_stop_steps != -1:
-            # Hook to stop training if loss does not decrease in over 10000 steps.
-            hooks.append(tf.estimator.experimental.stop_if_no_decrease_hook(estimator, "loss", FLAGS.early_stop_steps,
+            # Hook to stop training if loss does not decrease in over FLAGS.early_stop_steps steps.
+            hooks.append(tf.estimator.experimental.stop_if_no_decrease_hook(estimator, "loss",
+                                                                            FLAGS.early_stop_steps,
                                                                             min_steps=FLAGS.min_step))
 
         train_spec = tf.estimator.TrainSpec(input_fn=train_input_fn, max_steps=FLAGS.train_steps, hooks=hooks)
