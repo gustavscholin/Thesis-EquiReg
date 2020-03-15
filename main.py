@@ -28,7 +28,7 @@ import SimpleITK as sitk
 from absl import flags
 from models.tiramisu import DenseTiramisu
 from augmenters import unsup_logits_aug, seg_aug, img_aug
-from prediction_dice import calc_and_export_standard_dice, calc_and_export_consistency_dice
+from prediction_dice import calc_and_export_standard_dice, calc_and_export_equivariance_dice
 
 # os.environ['KMP_AFFINITY'] = 'disabled'
 # os.environ['KMP_DUPLICATE_LIB_OK']='True'
@@ -681,8 +681,8 @@ def train():
             tf.compat.v1.logging.info('Calculating standard Dice scores')
             calc_and_export_standard_dice(os.path.join(out_path, 'standard'))
 
-        tf.compat.v1.logging.info('Calculating consistency Dice scores')
-        calc_and_export_consistency_dice(os.path.join(out_path, 'pred_aug'), os.path.join(out_path, 'aug_pred'))
+        tf.compat.v1.logging.info('Calculating equivariance Dice scores')
+        calc_and_export_equivariance_dice(os.path.join(out_path, 'pred_aug'), os.path.join(out_path, 'aug_pred'))
 
 
 def main(_):

@@ -6,7 +6,7 @@ experiment_nbr=1
 seed=44
 early_stop_steps=20000
 
-model_dir="/mnt/storage/data/thesis-uda/ckpt/consistency/consistency_${sup_cut}_${experiment_nbr}_seed_${seed}"
+model_dir="/mnt/storage/data/thesis-uda/ckpt/equireg/equireg_${sup_cut}_${experiment_nbr}_seed_${seed}"
 
 python main.py \
   --do_eval_along_training=True \

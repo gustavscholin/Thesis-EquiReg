@@ -2,7 +2,7 @@
 data_dir=data/processed_data
 
 for experiment_nbr in {1..3}; do
-      model_dir="/mnt/storage/data/thesis-uda/ckpt/consistency/consistency_1.0_${experiment_nbr}"
+      model_dir="/mnt/storage/data/thesis-uda/ckpt/equireg/equireg_1.0_${experiment_nbr}"
 
       python main.py \
         --do_eval_along_training=True \

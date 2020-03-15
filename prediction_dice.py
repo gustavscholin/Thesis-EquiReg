@@ -64,9 +64,9 @@ def calc_and_export_standard_dice(pred_data_path):
     print(df.describe())
 
 
-def calc_and_export_consistency_dice(pred_aug_data_path, aug_pred_data_path):
+def calc_and_export_equivariance_dice(pred_aug_data_path, aug_pred_data_path):
     df = pd.DataFrame(
-        columns=['Patient Id', 'Consistency Dice Whole', 'Consistency Dice Core', 'Consistency Dice Enhancing'])
+        columns=['Patient Id', 'Equivariance Dice Whole', 'Equivariance Dice Core', 'Equivariance Dice Enhancing'])
 
     pred_aug_file_list = glob.glob(os.path.join(pred_aug_data_path, '*.nii.gz'))
     aug_pred_file_list = glob.glob(os.path.join(aug_pred_data_path, '*.nii.gz'))
@@ -84,12 +84,12 @@ def calc_and_export_consistency_dice(pred_aug_data_path, aug_pred_data_path):
         dice_enhancing = dice_score(aug_pred, pred_aug, 'enhancing')
 
         df = df.append(
-            {'Patient Id': pred_aug_patient_id, 'Consistency Dice Whole': dice_whole, 'Consistency Dice Core': dice_core,
-             'Consistency Dice Enhancing': dice_enhancing}, ignore_index=True)
+            {'Patient Id': pred_aug_patient_id, 'Equivariance Dice Whole': dice_whole, 'Equivariance Dice Core': dice_core,
+             'Equivariance Dice Enhancing': dice_enhancing}, ignore_index=True)
 
     out_path = os.path.join(pred_aug_data_path, '..')
-    df.to_csv(os.path.join(out_path, 'consistency_results.csv'), index=False, float_format='%.6f')
-    df.describe().to_csv(os.path.join(out_path, 'consistency_results_summary.csv'), float_format='%.6f')
+    df.to_csv(os.path.join(out_path, 'equivariance_results.csv'), index=False, float_format='%.6f')
+    df.describe().to_csv(os.path.join(out_path, 'equivariance_results_summary.csv'), float_format='%.6f')
 
     print(df.describe())
 
