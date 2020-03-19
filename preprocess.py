@@ -90,6 +90,7 @@ def process_data(data_paths, out_path, split, out_format, nbr_cores=1):
     path_list = []
     nb_slices_list = []
     crop_idx_list = []
+    aug_seeds_dict = {}
 
     if out_format == 'tfrecord':
         example_lists = []
@@ -100,6 +101,7 @@ def process_data(data_paths, out_path, split, out_format, nbr_cores=1):
             path_list.append(sample_dict['path'])
             nb_slices_list.append(sample_dict['nb_slices'])
             crop_idx_list.append(sample_dict['crop_idx'])
+            aug_seeds_dict[sample_dict['path'].split('/')[-1]] = sample_dict['aug_seeds']
 
             if len(example_lists) == FLAGS.nb_patients_per_file or len(data_paths) == len(path_list):
                 examples = list(itertools.chain.from_iterable(example_lists))
@@ -117,6 +119,7 @@ def process_data(data_paths, out_path, split, out_format, nbr_cores=1):
             path_list.append(sample_dict['path'])
             nb_slices_list.append(sample_dict['nb_slices'])
             crop_idx_list.append(sample_dict['crop_idx'])
+            aug_seeds_dict[sample_dict['path'].split('/')[-1]] = sample_dict['aug_seeds']
 
             if len(data_list) == FLAGS.nb_patients_per_file or len(data_paths) == len(path_list):
                 images, seg_masks = zip(*data_list)
@@ -126,7 +129,7 @@ def process_data(data_paths, out_path, split, out_format, nbr_cores=1):
                 shard_cnt += 1
                 data_list = []
 
-    return path_list, nb_slices_list, crop_idx_list
+    return path_list, nb_slices_list, crop_idx_list, aug_seeds_dict
 
 
 def get_data_paths(path):
@@ -150,20 +153,26 @@ def preproc_one(path, out_format, split):
 
     mri_channels, seg_masks, crop_idx = crop(mri_channels, seg_masks, split)
 
-    for channel in range(4):
-        mri_channels[channel] = bias_field_correction(mri_channels[channel])
+    # for channel in range(4):
+    #     mri_channels[channel] = bias_field_correction(mri_channels[channel])
 
     images = sitk.GetArrayFromImage(sitk.Compose(mri_channels))
 
     for channel in range(4):
         images[:, :, :, channel] = histogram_equalization(images[:, :, :, channel])
 
+    aug_seeds = []
+    for i in range(images.shape[0]):
+        sq = np.random.SeedSequence()
+        aug_seeds.append(sq.entropy)
+
     if out_format == 'tfrecord':
         return {
             'example_list': get_example_list(images, seg_masks),
             'nb_slices': images.shape[0],
             'path': path,
-            'crop_idx': crop_idx
+            'crop_idx': crop_idx,
+            'aug_seeds': aug_seeds
         }
 
     elif out_format == 'numpy':
@@ -172,7 +181,8 @@ def preproc_one(path, out_format, split):
             'seg_masks': seg_masks,
             'nb_slices': images.shape[0],
             'path': path,
-            'crop_idx': crop_idx
+            'crop_idx': crop_idx,
+            'aug_seeds': aug_seeds
         }
 
 
@@ -242,12 +252,16 @@ def main(argsv):
 
         test_paths = get_data_paths(unlabeled_data_root)
 
-        train_paths, train_slices, train_crops = process_data(train_paths, FLAGS.out_path, split="train",
-                                                              out_format=FLAGS.out_format, nbr_cores=FLAGS.nbr_cores)
-        val_paths, val_slices, val_crops = process_data(val_paths, FLAGS.out_path, split="val",
-                                                        out_format=FLAGS.out_format, nbr_cores=FLAGS.nbr_cores)
-        test_paths, test_slices, test_crops = process_data(test_paths, FLAGS.out_path, split='test',
-                                                           out_format=FLAGS.out_format, nbr_cores=FLAGS.nbr_cores)
+        train_paths, train_slices, train_crops, train_aug_seeds = process_data(train_paths, FLAGS.out_path,
+                                                                               split="train",
+                                                                               out_format=FLAGS.out_format,
+                                                                               nbr_cores=FLAGS.nbr_cores)
+        val_paths, val_slices, val_crops, val_aug_seeds = process_data(val_paths, FLAGS.out_path, split="val",
+                                                                       out_format=FLAGS.out_format,
+                                                                       nbr_cores=FLAGS.nbr_cores)
+        test_paths, test_slices, test_crops, test_aug_seeds = process_data(test_paths, FLAGS.out_path, split='test',
+                                                                           out_format=FLAGS.out_format,
+                                                                           nbr_cores=FLAGS.nbr_cores)
 
         nbr_train_samples = sum(train_slices)
         nbr_val_samples = sum(val_slices)
@@ -273,8 +287,18 @@ def main(argsv):
                 'crop_idx': test_crops
             }
         }
+
+        aug_seeds = {
+            'train': train_aug_seeds,
+            'val': val_aug_seeds,
+            'test': test_aug_seeds
+        }
+
         with open(os.path.join(FLAGS.out_path, 'data_info.json'), 'w') as fp:
             json.dump(data_info, fp, indent=4)
+
+        with open(os.path.join(FLAGS.out_path, 'aug_seed.json'), 'w') as fp:
+            json.dump(aug_seeds, fp, indent=4)
 
         logging.info('Pre-processing finished')
 
