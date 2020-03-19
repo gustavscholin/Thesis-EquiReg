@@ -8,19 +8,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from data import get_input_fn
 from augmenters import img_aug, sup_aug
-
-
-def _save_plt_as_img(path, name, img=None, seg=None):
-    fig = plt.figure(frameon=False)
-    ax = plt.Axes(fig, [0., 0., 1., 1.])
-    ax.set_axis_off()
-    fig.add_axes(ax)
-    if img is not None:
-        ax.imshow(img, 'gray', interpolation='none')
-    if seg is not None:
-        ax.imshow(seg, 'jet', vmin=0, vmax=3, interpolation='none', alpha=0.5)
-    plt.savefig(os.path.join(path, '{}.jpg'.format(name)), bbox_inches='tight')
-    plt.close()
+from utils import save_plt_as_img
 
 
 patient_id = 'BraTS19_CBICA_BAN_1'
@@ -52,7 +40,7 @@ for idx, sample in enumerate(dataset):
         seg_mask_np = tf.cast(sample['seg_mask'], tf.uint8).numpy()[0, ...]
         seg_mask_np = np.ma.masked_where(seg_mask_np == 0, seg_mask_np)
 
-        _save_plt_as_img('report_images', 'after_preprocess', img=img_np[..., 2])
+        save_plt_as_img('report_images', 'after_preprocess', img=img_np[..., 2])
 
         plt.figure(figsize=(20, 10))
         plt.subplot(1, 2, 1)
@@ -62,8 +50,8 @@ for idx, sample in enumerate(dataset):
         plt.imshow(seg_mask_np, 'jet', vmin=0, vmax=3, interpolation='none', alpha=0.5)
 
         # Save one original
-        _save_plt_as_img('report_images', 'original', img=img_np[..., 2],
-                         seg=seg_mask_np)
+        save_plt_as_img('report_images', 'original', img=img_np[..., 2],
+                        seg=seg_mask_np)
 
         # Save and show 3 examples of strong augmentations of the original
         strong_aug_imgs = img_aug(np.stack([img_np[..., 2]] * 3), strong_seed_seqs, is_seg_maps=False)
@@ -75,8 +63,8 @@ for idx, sample in enumerate(dataset):
         plt.imshow(img_np[..., 2], 'gray', interpolation='none')
         plt.imshow(seg_mask_np, 'jet', vmin=0, vmax=3, interpolation='none', alpha=0.5)
         for i in range(3):
-            _save_plt_as_img('report_images', 'strong_aug_example_{}'.format(str(i)), img=strong_aug_imgs[i, ...],
-                             seg=strong_aug_seg_masks[i, ...])
+            save_plt_as_img('report_images', 'strong_aug_example_{}'.format(str(i)), img=strong_aug_imgs[i, ...],
+                            seg=strong_aug_seg_masks[i, ...])
             plt.subplot(1, 4, i + 2)
             plt.imshow(strong_aug_imgs[i, ...], 'gray', interpolation='none')
             plt.imshow(strong_aug_seg_masks[i, ...], 'jet', vmin=0, vmax=3, interpolation='none', alpha=0.5)
@@ -94,8 +82,8 @@ for idx, sample in enumerate(dataset):
         plt.imshow(img_np[..., 2], 'gray', interpolation='none')
         plt.imshow(seg_mask_np, 'jet', vmin=0, vmax=3, interpolation='none', alpha=0.5)
         for i in range(3):
-            _save_plt_as_img('report_images', 'weak_aug_example_{}'.format(str(i)), img=weak_aug_imgs[i],
-                             seg=weak_aug_seg_masks[i])
+            save_plt_as_img('report_images', 'weak_aug_example_{}'.format(str(i)), img=weak_aug_imgs[i],
+                            seg=weak_aug_seg_masks[i])
             plt.subplot(1, 4, i + 2)
             plt.imshow(weak_aug_imgs[i], 'gray', interpolation='none')
             plt.imshow(weak_aug_seg_masks[i], 'jet', vmin=0, vmax=3, interpolation='none', alpha=0.5)

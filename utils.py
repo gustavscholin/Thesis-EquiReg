@@ -1,6 +1,20 @@
 """Helper functions."""
-
+import os
 import tensorflow as tf
+import matplotlib.pyplot as plt
+
+
+def save_plt_as_img(path, name, img=None, seg=None):
+    fig = plt.figure(frameon=False)
+    ax = plt.Axes(fig, [0., 0., 1., 1.])
+    ax.set_axis_off()
+    fig.add_axes(ax)
+    if img is not None:
+        ax.imshow(img, 'gray', interpolation='none')
+    if seg is not None:
+        ax.imshow(seg, 'jet', vmin=0, vmax=3, interpolation='none', alpha=0.5)
+    plt.savefig(os.path.join(path, '{}.jpg'.format(name)), bbox_inches='tight')
+    plt.close()
 
 
 def collective_dice_smaller(best_eval_result, current_eval_result):

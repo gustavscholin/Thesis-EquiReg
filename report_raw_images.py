@@ -5,19 +5,7 @@ import numpy as np
 import SimpleITK as sitk
 import matplotlib.pyplot as plt
 import os
-
-
-def _save_plt_as_img(path, name, img=None, seg=None):
-    fig = plt.figure(frameon=False)
-    ax = plt.Axes(fig, [0., 0., 1., 1.])
-    ax.set_axis_off()
-    fig.add_axes(ax)
-    if img is not None:
-        ax.imshow(img, 'gray', interpolation='none')
-    if seg is not None:
-        ax.imshow(seg, 'jet', vmin=0, vmax=3, interpolation='none', alpha=0.5)
-    plt.savefig(os.path.join(path, '{}.jpg'.format(name)), bbox_inches='tight')
-    plt.close()
+from utils import save_plt_as_img
 
 
 if not os.path.isdir('report_images'):
@@ -52,7 +40,7 @@ for path in data_paths:
     mask = (data != 0)
     plt.figure()
     plt.imshow(data[patient_slice, ...], 'gray', interpolation='none')
-    _save_plt_as_img('report_images', 'before_img', img=data[patient_slice, ...])
+    save_plt_as_img('report_images', 'before_img', img=data[patient_slice, ...])
     data_flat = data[mask]
     plt.figure()
     plt.hist(data_flat)
@@ -72,14 +60,14 @@ for path in data_paths:
     data[mask] = new_data_flat
     plt.figure()
     plt.imshow(data[patient_slice, ...], 'gray', interpolation='none')
-    _save_plt_as_img('report_images', 'after_img', img=data[patient_slice, ...])
+    save_plt_as_img('report_images', 'after_img', img=data[patient_slice, ...])
 
     # Save and show examples of all modalities of a single MRI-slice, one of those also exemplifying a MRI-slice
     # before preprocessing
     for seq in mri:
-        _save_plt_as_img('report_images', seq[1], img=seq[0][patient_slice, ...], seg=seg_map[patient_slice, ...])
+        save_plt_as_img('report_images', seq[1], img=seq[0][patient_slice, ...], seg=seg_map[patient_slice, ...])
         if seq[1] == 't1ce':
-            _save_plt_as_img('report_images', 'before_preprocess', img=seq[0][patient_slice, ...])
+            save_plt_as_img('report_images', 'before_preprocess', img=seq[0][patient_slice, ...])
 
     for i in range(patient_slice, 155):
         plt.figure(num=str(i), figsize=(20, 10))

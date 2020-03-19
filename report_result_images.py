@@ -6,19 +6,7 @@ import matplotlib.pyplot as plt
 import os
 import glob
 import SimpleITK as sitk
-
-
-def _save_plt_as_img(path, name, img=None, seg=None):
-    fig = plt.figure(frameon=False)
-    ax = plt.Axes(fig, [0., 0., 1., 1.])
-    ax.set_axis_off()
-    fig.add_axes(ax)
-    if img is not None:
-        ax.imshow(img, 'gray', interpolation='none')
-    if seg is not None:
-        ax.imshow(seg, 'jet', vmin=0, vmax=3, interpolation='none', alpha=0.5)
-    plt.savefig(os.path.join(path, '{}.jpg'.format(name)), bbox_inches='tight')
-    plt.close()
+from utils import save_plt_as_img
 
 
 def _save_patient_gt(patient_id: str, mri: np.ndarray, seg_map: np.ndarray):
@@ -33,7 +21,7 @@ def _save_patient_gt(patient_id: str, mri: np.ndarray, seg_map: np.ndarray):
         os.makedirs(save_path)
 
     for i in range(mri.shape[0]):
-        _save_plt_as_img(save_path, str(i).zfill(3), mri[i, ...], seg_map[i, ...])
+        save_plt_as_img(save_path, str(i).zfill(3), mri[i, ...], seg_map[i, ...])
         print('{} : ground_truth : {}'. format(patient_id, i))
 
 
@@ -50,7 +38,7 @@ def _save_patient_pred(patient_id: str, model_name: str, mri: np.ndarray, predic
         os.makedirs(save_path)
 
     for i in range(mri.shape[0]):
-        _save_plt_as_img(save_path, str(i).zfill(3), mri[i, ...], prediction[i, ...])
+        save_plt_as_img(save_path, str(i).zfill(3), mri[i, ...], prediction[i, ...])
         print('{} : {} : {}'.format(patient_id, model_name, i))
 
 
@@ -91,7 +79,7 @@ for i in range(3):
     plt.title('Ground Truth')
     plt.imshow(mri_img, 'gray', interpolation='none')
     plt.imshow(seg_map_img, 'jet', vmin=0, vmax=3, interpolation='none', alpha=0.5)
-    _save_plt_as_img('report_images', 'ground_truth_{}'.format(i), img=mri_img, seg=seg_map_img)
+    save_plt_as_img('report_images', 'ground_truth_{}'.format(i), img=mri_img, seg=seg_map_img)
 
     # Save and show all models predicted version of the same specific patient slices
     for idx, model in enumerate(best_models_dict):
@@ -106,7 +94,7 @@ for i in range(3):
 
         pred_seg_map = pred_seg_map[patient_slices[i], ...]
         pred_seg_map = np.ma.masked_where(pred_seg_map == 0, pred_seg_map)
-        _save_plt_as_img('report_images', '{}_{}'.format(model, i), img=mri_img, seg=pred_seg_map)
+        save_plt_as_img('report_images', '{}_{}'.format(model, i), img=mri_img, seg=pred_seg_map)
 
         plt.subplot(2, 5, idx + 2)
         plt.title(model)
