@@ -79,7 +79,7 @@ for i in range(3):
     plt.title('Ground Truth')
     plt.imshow(mri_img, 'gray', interpolation='none')
     plt.imshow(seg_map_img, 'jet', vmin=0, vmax=3, interpolation='none', alpha=0.5)
-    save_plt_as_img('report_images', 'ground_truth_{}'.format(i), img=mri_img, seg=seg_map_img)
+    save_plt_as_img('report_images', 'ground_truth_{}'.format(i), mri_slice=mri_img, seg=seg_map_img)
 
     # Save and show all models predicted version of the same specific patient slices
     for idx, model in enumerate(best_models_dict):
@@ -94,7 +94,7 @@ for i in range(3):
 
         pred_seg_map = pred_seg_map[patient_slices[i], ...]
         pred_seg_map = np.ma.masked_where(pred_seg_map == 0, pred_seg_map)
-        save_plt_as_img('report_images', '{}_{}'.format(model, i), img=mri_img, seg=pred_seg_map)
+        save_plt_as_img('report_images', '{}_{}'.format(model, i), mri_slice=mri_img, seg=pred_seg_map)
 
         plt.subplot(2, 5, idx + 2)
         plt.title(model)

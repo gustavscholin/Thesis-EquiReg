@@ -1,39 +1,24 @@
-# coding=utf-8
-# Copyright 2019 The Google UDA Team Authors.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
+"""
+Main script for training and evaluating baseline and EquiReg-models.
+"""
 import glob
 import itertools
 import os
 import json
 import numpy as np
 import tensorflow as tf
-
 import best_ckpt_copier as best_ckpt_copier
 import data as data
 import utils as utils
 import SimpleITK as sitk
 
 from absl import flags
-from models.tiramisu import DenseTiramisu
-from augmenters import unsup_logits_aug, seg_aug, img_aug
-from prediction_dice import calc_and_export_standard_dice, calc_and_export_equivariance_dice
+from tiramisu import DenseTiramisu
+from augmenters import unsup_logits_aug, data_aug
+from utils import calc_and_export_standard_dice, calc_and_export_equivariance_dice
+from typing import Callable
 
-# os.environ['KMP_AFFINITY'] = 'disabled'
-# os.environ['KMP_DUPLICATE_LIB_OK']='True'
-
-# UDA config:
+# EquiReg config:
 flags.DEFINE_float(
     "sup_cut", default=0.1, lower_bound=0.0, upper_bound=1.0,
     help="How much supervised training data to use")
@@ -53,16 +38,17 @@ flags.DEFINE_enum(
     "tsa", "",
     enum_values=["", "linear_schedule", "log_schedule", "exp_schedule", "soft"],
     help="anneal schedule of training signal annealing. "
-         "tsa='' means not using TSA. See the paper for other schedules.")
+         "tsa='' means not using TSA. "
+         "Not used in the thesis.")
 flags.DEFINE_float(
-    "uda_softmax_temp", -1,
+    "softmax_temp", -1,
     help="The temperature of the Softmax when making prediction on unlabeled"
-         "examples. -1 means to use normal Softmax")
+         "examples. -1 means to use normal Softmax. "
+         "Not used in the thesis.")
 flags.DEFINE_float(
     "unsup_coeff", default=1.0,
-    help="The coefficient on the UDA loss. "
-         "setting unsup_coeff to 1 works for most settings. "
-         "When you have extermely few samples, consider increasing unsup_coeff")
+    help="The coefficient on the EquiReg loss. "
+         "Setting unsup_coeff to 1 works for most settings.")
 flags.DEFINE_bool(
     'unsup_crop', default=True,
     help='Whether to only calculate unsup loss from non-zero input pixels or not.'
@@ -77,8 +63,7 @@ flags.DEFINE_string(
     help="model dir of the saved checkpoints.")
 flags.DEFINE_bool(
     "do_eval_along_training", default=True,
-    help="Whether to run eval on the test set during training. "
-         "This is only used to debug.")
+    help="Whether to run eval on the test set during training.")
 flags.DEFINE_bool(
     'do_predict', default=True,
     help='Whether to run predict.'
@@ -158,6 +143,11 @@ flags.DEFINE_bool(
     'exp_lr_decay', default=False,
     help='Whether to do exponential learning rate decay.'
 )
+flags.DEFINE_bool(
+    'do_weight_decay', default=False,
+    help='Whether to do weight decay during training. '
+         'Not used in thesis.'
+)
 flags.DEFINE_float(
     "weight_decay_rate", default=1e-4,
     help="Weight decay rate.")
@@ -184,15 +174,6 @@ def get_tsa_threshold(schedule, global_step, num_train_steps, start, end):
         # [1 - exp(0), 1 - exp(-5)] = [0, 0.99]
         coeff = 1 - tf.exp((-step_ratio) * scale)
     return coeff * (end - start) + start
-
-
-def _kl_divergence_with_logits(p_logits, q_logits):
-    p = tf.nn.softmax(p_logits)
-    log_p = tf.nn.log_softmax(p_logits)
-    log_q = tf.nn.log_softmax(q_logits)
-
-    kl = tf.reduce_sum(input_tensor=p * (log_p - log_q), axis=-1)
-    return kl
 
 
 def anneal_sup_loss(sup_logits, sup_labels, sup_loss, global_step, training_summaries):
@@ -232,8 +213,31 @@ def anneal_sup_loss(sup_logits, sup_labels, sup_loss, global_step, training_summ
     return sup_loss, avg_sup_loss
 
 
+def _kl_divergence_with_logits(p_logits: tf.Tensor, q_logits: tf.Tensor) -> tf.Tensor:
+    """
+    Calculate KL-divergence from probability distribution q to probability distribution p.
+    :param p_logits: To logits
+    :param q_logits: From logits
+    :return: The Kl-divergence
+    """
+    p = tf.nn.softmax(p_logits)
+    log_p = tf.nn.log_softmax(p_logits)
+    log_q = tf.nn.log_softmax(q_logits)
+
+    kl = tf.reduce_sum(input_tensor=p * (log_p - log_q), axis=-1)
+    return kl
+
+
 @tf.function
-def class_convert(true_masks, pred_masks, brats_class):
+def class_convert(true_masks: tf.Tensor, pred_masks: tf.Tensor, brats_class: str) -> list:
+    """
+    Converts ground truth and predictions tensors to binary tensors.
+    The binary conversion is defined by the BraTS binary problem.
+    :param true_masks: Ground truth tensor
+    :param pred_masks: Prediction tensor
+    :param brats_class: Binary problem
+    :return: Binary ground truth and prediction
+    """
     brats_class_mapping = {
         'whole': tf.constant([0, 1, 1, 1], dtype='float32'),
         'core': tf.constant([0, 1, 0, 1], dtype='float32'),
@@ -249,7 +253,13 @@ def class_convert(true_masks, pred_masks, brats_class):
 
 
 @tf.function
-def dice_coef(true, pred):
+def dice_coef(true: tf.Tensor, pred: tf.Tensor) -> tf.Tensor:
+    """
+    Calculates Dice score from ground truth and predictions tensors.
+    :param true: Ground truth tensor
+    :param pred: Prediction tensor
+    :return: Dice score
+    """
     tp = tf.reduce_sum(input_tensor=tf.cast(tf.logical_and(tf.equal(true, 1), tf.equal(pred, 1)), tf.float32),
                        axis=(-1, -2))
     fp = tf.reduce_sum(input_tensor=tf.cast(tf.logical_and(tf.equal(true, 0), tf.equal(pred, 1)), tf.float32),
@@ -262,11 +272,21 @@ def dice_coef(true, pred):
     return dice_coefs
 
 
-def get_model_fn():
-    def model_fn(features, labels, mode, params):
+def get_model_fn() -> Callable:
+    """
+    Get model function.
+    :return: Model function
+    """
+    def model_fn(features: dict, mode: str, params: dict) -> tf.estimator.EstimatorSpec:
+        """
+        Model function for the Tenorflow estimator.
+        :param features: Dictionary with 2D mri-slices and ground truth segmentation maps.
+        :param mode: Training or evaluation
+        :param params: Includes model dir and number training steps per epoch
+        :return: A Tensorflow estimator specification
+        """
         model = DenseTiramisu(growth_k=16, layers_per_block=[4, 5, 7, 10, 12, 15], num_classes=FLAGS.num_classes)
 
-        #### Configuring the optimizer
         global_step = tf.compat.v1.train.get_global_step()
         metric_dict = {}
         training_summaries = []
@@ -297,9 +317,10 @@ def get_model_fn():
                     'output': tf.estimator.export.PredictOutput(output)
                 })
 
-        sup_masks = features['seg_mask']
+        # Supervised loss
+        sup_maps = features['seg_mask']
         sup_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(
-            labels=sup_masks,
+            labels=sup_maps,
             logits=sup_logits)
         sup_prob = tf.nn.softmax(sup_logits, axis=-1)
         training_summaries.append(
@@ -307,21 +328,22 @@ def get_model_fn():
                 input_tensor=tf.reduce_max(input_tensor=sup_prob, axis=-1), axis=(-1, -2)))))
         if FLAGS.tsa and is_training:
             # TODO: Implement TSA
-            sup_loss, avg_sup_loss = anneal_sup_loss(sup_logits, sup_masks, sup_loss,
+            sup_loss, avg_sup_loss = anneal_sup_loss(sup_logits, sup_maps, sup_loss,
                                                      global_step, training_summaries)
         else:
             avg_sup_loss = tf.reduce_mean(input_tensor=tf.reduce_mean(input_tensor=sup_loss, axis=(-1, -2)))
         total_loss = avg_sup_loss
         training_summaries.append(tf.compat.v1.summary.scalar('sup/loss', avg_sup_loss))
 
+        # Unsupervised loss
         if FLAGS.unsup_ratio > 0 and is_training:
             aug_bsz = tf.shape(input=features["ori_image"])[0]
 
             ori_logits = all_logits[sup_bsz: sup_bsz + aug_bsz]
             aug_logits = all_logits[sup_bsz + aug_bsz:]
-            if FLAGS.uda_softmax_temp != -1:
+            if FLAGS.softmax_temp != -1:
                 # TODO: Find out if this is needed
-                ori_logits_tgt = ori_logits / FLAGS.uda_softmax_temp
+                ori_logits_tgt = ori_logits / FLAGS.softmax_temp
             else:
                 ori_logits_tgt = ori_logits
             ori_logits_aug = tf.compat.v1.py_func(unsup_logits_aug, [ori_logits_tgt, features['seed_sq_ent']],
@@ -361,11 +383,13 @@ def get_model_fn():
             total_loss += FLAGS.unsup_coeff * avg_unsup_loss
             training_summaries.append(tf.compat.v1.summary.scalar('unsup/loss', avg_unsup_loss))
 
-        # total_loss = utils.decay_weights(
-        #    total_loss,
-        #    FLAGS.weight_decay_rate)
+        # Weight decay
+        if FLAGS.do_weight_decay:
+            total_loss = utils.decay_weights(
+               total_loss,
+               FLAGS.weight_decay_rate)
 
-        #### Check model parameters
+        # Check model parameters
         num_params = sum([np.prod(v.shape) for v in tf.compat.v1.trainable_variables()])
         tf.compat.v1.logging.info("#params: {}".format(num_params))
 
@@ -375,7 +399,7 @@ def get_model_fn():
             for v in tf.compat.v1.trainable_variables():
                 tf.compat.v1.logging.info(format_str.format(v.name, v.get_shape()))
 
-        #### Evaluation mode
+        # Evaluation mode
         if mode == tf.estimator.ModeKeys.EVAL:
             predictions = tf.argmax(input=sup_logits, axis=-1, output_type=tf.int32)
 
@@ -386,7 +410,7 @@ def get_model_fn():
             dice_collective = tf.zeros((predictions.shape[0]))
 
             for brats_class in brats_classes:
-                true, pred = class_convert(sup_masks, predictions, brats_class)
+                true, pred = class_convert(sup_maps, predictions, brats_class)
                 dice_score = dice_coef(true, pred)
                 dice_scores[brats_class] = tf.compat.v1.metrics.mean(dice_score)
                 dice_collective = tf.add(dice_collective, dice_score)
@@ -403,7 +427,7 @@ def get_model_fn():
 
             if FLAGS.plot_eval_images:
                 tf.compat.v1.summary.image('eval/input', tf.expand_dims(all_images[..., 0], -1), 2)
-                tf.compat.v1.summary.image('eval/gt_mask', tf.cast(tf.expand_dims(sup_masks, -1), tf.float32), 2)
+                tf.compat.v1.summary.image('eval/gt_mask', tf.cast(tf.expand_dims(sup_maps, -1), tf.float32), 2)
                 tf.compat.v1.summary.image('eval/pred_mask', tf.cast(tf.expand_dims(predictions, -1), tf.float32), 2)
 
             eval_summary_hook = tf.estimator.SummarySaverHook(
@@ -411,7 +435,7 @@ def get_model_fn():
                 output_dir=FLAGS.model_dir,
                 summary_op=tf.compat.v1.summary.merge_all())
 
-            #### Constucting evaluation TPUEstimatorSpec.
+            # Constructing evaluation EstimatorSpec.
             eval_spec = tf.estimator.EstimatorSpec(
                 mode=mode,
                 loss=avg_sup_loss,
@@ -420,18 +444,16 @@ def get_model_fn():
 
             return eval_spec
 
+        # Learning rate
         learning_rate = tf.Variable(FLAGS.learning_rate)
-        # eval_dir = os.path.join(FLAGS.model_dir, 'eval')
-        # if FLAGS.dec_lr_on_plateau:
-        #     learning_rate = utils.plateau_decay(learning_rate, global_step, eval_dir)
         if FLAGS.exp_lr_decay:
             learning_rate = tf.compat.v1.train.exponential_decay(learning_rate, global_step,
                                                                  params['epoch_steps'], 0.95)
 
         training_summaries.append(tf.compat.v1.summary.scalar('lr/learning_rate', learning_rate))
 
+        # Backprop
         optimizer = tf.compat.v1.train.AdamOptimizer(learning_rate=learning_rate)
-
         grads_and_vars = optimizer.compute_gradients(total_loss)
         gradients, variables = zip(*grads_and_vars)
         update_ops = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.UPDATE_OPS)
@@ -439,10 +461,9 @@ def get_model_fn():
             train_op = optimizer.apply_gradients(
                 zip(gradients, variables), global_step=tf.compat.v1.train.get_global_step())
 
-        #### Creating training logging hook
-        # compute accuracy
-        sup_pred = tf.argmax(input=sup_logits, axis=-1, output_type=sup_masks.dtype)
-        is_correct = tf.cast(tf.equal(sup_pred, sup_masks), dtype=tf.float32)
+        # Creating training logging hook
+        sup_pred = tf.argmax(input=sup_logits, axis=-1, output_type=sup_maps.dtype)
+        is_correct = tf.cast(tf.equal(sup_pred, sup_maps), dtype=tf.float32)
         acc = tf.reduce_mean(input_tensor=is_correct)
         metric_dict["sup/sup_loss"] = avg_sup_loss
         metric_dict["training/loss"] = total_loss
@@ -483,7 +504,7 @@ def get_model_fn():
         else:
             training_hooks = [logging_hook]
 
-        #### Constucting training TPUEstimatorSpec.
+        # Constucting training EstimatorSpec.
         train_spec = tf.estimator.EstimatorSpec(
             mode=mode, loss=total_loss, train_op=train_op,
             training_hooks=training_hooks)
@@ -494,16 +515,19 @@ def get_model_fn():
 
 
 def train():
-    # Create input function
+    """
+    Training and evaluation.
+    """
     with tf.io.gfile.GFile(os.path.join(FLAGS.data_dir, 'data_info.json'), 'r') as fp:
         data_info = json.load(fp)
     if FLAGS.unsup_ratio == 0:
         FLAGS.unsup_cut = 0.0
 
+    # Create input functions
     train_input_fn = data.get_input_fn(
         data_dir=FLAGS.data_dir,
         split="train",
-        data_info=data_info,
+        data_size=data_info['train']['size'],
         batch_size=FLAGS.train_batch_size,
         sup_cut=FLAGS.sup_cut,
         unsup_cut=FLAGS.unsup_cut,
@@ -514,7 +538,7 @@ def train():
     eval_input_fn = data.get_input_fn(
         data_dir=FLAGS.data_dir,
         split="val",
-        data_info=data_info,
+        data_size=data_info['val']['size'],
         batch_size=FLAGS.eval_batch_size,
         sup_cut=1.0,
         unsup_cut=0.0,
@@ -532,16 +556,12 @@ def train():
 
     # Training
     if FLAGS.do_eval_along_training:
-        # tf.compat.v1.disable_eager_execution()
 
         tf.compat.v1.logging.info("***** Running training & evaluation *****")
         tf.compat.v1.logging.info("  Supervised batch size = %d", FLAGS.train_batch_size)
         tf.compat.v1.logging.info("  Unsupervised batch size = %d",
                                   FLAGS.train_batch_size * FLAGS.unsup_ratio)
         tf.compat.v1.logging.info("  Num train steps = %d", FLAGS.train_steps)
-
-        # serving_input_receiver_fn = tf.estimator.export.build_raw_serving_input_receiver_fn(
-        #     {'image': tf.compat.v1.placeholder(tf.float32, [None, 224, 224, 4], name='input_images')})
 
         # 7 is arbitrary and will be eliminated
         serving_input_receiver_fn = tf.estimator.export.build_raw_serving_input_receiver_fn(
@@ -577,8 +597,6 @@ def train():
         tf.estimator.train_and_evaluate(estimator, train_spec, eval_spec)
 
     if FLAGS.do_predict:
-        # tf.compat.v1.enable_eager_execution()
-
         tf.compat.v1.logging.info('***** Running prediction *****')
 
         with open('data/processed_data/aug_seed.json', 'r') as fp:
@@ -603,7 +621,7 @@ def train():
         test_input_fn = data.get_input_fn(
             data_dir=FLAGS.data_dir,
             split=FLAGS.pred_dataset,
-            data_info=data_info,
+            data_size=data_info[FLAGS.pred_dataset]['size'],
             batch_size=FLAGS.pred_batch_size,
             sup_cut=1.0,
             unsup_cut=0.0,
@@ -620,7 +638,13 @@ def train():
         patient_cnt = 0
         img_cnt = 0
 
-        def pad_and_export(patient_pred, mode):
+        def pad_and_export(patient_pred: np.ndarray, mode: str):
+            """
+            Pad and export predicted segmentation maps as .nii.gz-files.
+            :param patient_pred: Predicted segmentation maps
+            :param mode: Standard prediction, augmented prediction
+             or predicted augmentation
+            """
             # Make the prediction dims (155,240,240) again for BRATS evaluation
             patient_pred = np.pad(patient_pred, ((0, 0), (8, 8), (8, 8)))
 
@@ -642,7 +666,7 @@ def train():
             imgs = sample['image'].numpy()
 
             aug_seeds = aug_seeds_list[img_cnt:img_cnt + imgs.shape[0]]
-            imgs_aug = img_aug(imgs, aug_seeds, is_seg_maps=False)
+            imgs_aug = data_aug(imgs, aug_seeds, is_seg_maps=False)
 
             pred_batch = predict(image=tf.constant(imgs))['prediction'].numpy()
             aug_pred_batch = predict(image=tf.constant(imgs_aug))['prediction'].numpy()
@@ -662,8 +686,8 @@ def train():
 
                     patient_pred = np.stack(preds)
                     patient_aug_pred = np.stack(aug_preds)
-                    patient_pred_aug = img_aug(patient_pred, aug_seeds_dict[FLAGS.pred_dataset][patient_id],
-                                               is_seg_maps=True)
+                    patient_pred_aug = data_aug(patient_pred, aug_seeds_dict[FLAGS.pred_dataset][patient_id],
+                                                is_seg_maps=True)
 
                     pad_and_export(patient_pred, 'standard')
                     pad_and_export(patient_aug_pred, 'aug_pred')
@@ -686,6 +710,9 @@ def train():
 
 
 def main(_):
+    """
+    Main function.
+    """
     if FLAGS.do_eval_along_training:
         tf.io.gfile.makedirs(FLAGS.model_dir)
         flags_txt = FLAGS.flags_into_string()

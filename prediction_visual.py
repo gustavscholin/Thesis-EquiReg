@@ -8,7 +8,7 @@ import os
 import glob
 import SimpleITK as sitk
 
-from augmenters import img_aug
+from augmenters import data_aug
 
 
 def get_input(patient_id: str, input_data_path: str) -> tuple:
@@ -81,7 +81,7 @@ def equivariance_visual(pred_aug_data_path: str, aug_pred_data_path: str, input_
     patient_index = [idx for idx, p in enumerate(data_info[pred_dataset]['paths']) if patient_id in p][0]
     patient_crop_idx = data_info[pred_dataset]['crop_idx'][patient_index]
     input_aug = input[patient_crop_idx[0]:patient_crop_idx[1], 8:232, 8:232]
-    input_aug = img_aug(input_aug, aug_seeds[pred_dataset][patient_id], is_seg_maps=False)
+    input_aug = data_aug(input_aug, aug_seeds[pred_dataset][patient_id], is_seg_maps=False)
     input_aug = np.pad(input_aug, ((0, 0), (8, 8), (8, 8)))
     input[patient_crop_idx[0]:patient_crop_idx[1]] = input_aug
 

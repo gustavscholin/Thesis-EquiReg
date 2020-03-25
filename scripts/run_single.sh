@@ -2,20 +2,22 @@
 data_dir=data/processed_data
 
 sup_cut=0.05
-experiment_nbr=1
+unsup_cut=1.0
+batch_size=2
+unsup_ratio=3
 seed=44
 early_stop_steps=20000
 
-model_dir="/mnt/storage/data/thesis-uda/ckpt/equireg/equireg_${sup_cut}_${experiment_nbr}_seed_${seed}"
+model_dir="ckpt/model_sup_${sup_cut}_unsup_${unsup_cut}_seed_${seed}"
 
 python main.py \
   --do_eval_along_training=True \
   --do_predict=False \
   --sup_cut=${sup_cut[i]} \
-  --unsup_cut=1.0 \
-  --unsup_ratio=3 \
+  --unsup_cut=${unsup_cut} \
+  --unsup_ratio=${unsup_ratio} \
   --shuffle_seed=${seed} \
-  --train_batch_size=2 \
+  --train_batch_size=${batch_size} \
   --eval_batch_size=14 \
   --train_steps=200000 \
   --max_save=1 \

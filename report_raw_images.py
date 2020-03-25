@@ -40,7 +40,7 @@ for path in data_paths:
     mask = (data != 0)
     plt.figure()
     plt.imshow(data[patient_slice, ...], 'gray', interpolation='none')
-    save_plt_as_img('report_images', 'before_img', img=data[patient_slice, ...])
+    save_plt_as_img('report_images', 'before_img', mri_slice=data[patient_slice, ...])
     data_flat = data[mask]
     plt.figure()
     plt.hist(data_flat)
@@ -60,14 +60,14 @@ for path in data_paths:
     data[mask] = new_data_flat
     plt.figure()
     plt.imshow(data[patient_slice, ...], 'gray', interpolation='none')
-    save_plt_as_img('report_images', 'after_img', img=data[patient_slice, ...])
+    save_plt_as_img('report_images', 'after_img', mri_slice=data[patient_slice, ...])
 
     # Save and show examples of all modalities of a single MRI-slice, one of those also exemplifying a MRI-slice
     # before preprocessing
     for seq in mri:
-        save_plt_as_img('report_images', seq[1], img=seq[0][patient_slice, ...], seg=seg_map[patient_slice, ...])
+        save_plt_as_img('report_images', seq[1], mri_slice=seq[0][patient_slice, ...], seg=seg_map[patient_slice, ...])
         if seq[1] == 't1ce':
-            save_plt_as_img('report_images', 'before_preprocess', img=seq[0][patient_slice, ...])
+            save_plt_as_img('report_images', 'before_preprocess', mri_slice=seq[0][patient_slice, ...])
 
     for i in range(patient_slice, 155):
         plt.figure(num=str(i), figsize=(20, 10))

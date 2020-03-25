@@ -1,3 +1,6 @@
+"""
+Class to copy and save the best checkpoint during training.
+"""
 import glob
 import os
 import shutil
@@ -18,6 +21,7 @@ class Checkpoint(object):
 
 
 class BestCheckpointCopier(tf.estimator.Exporter):
+
     checkpoints = None
     checkpoints_to_keep = None
     compare_fn = None
@@ -37,30 +41,30 @@ class BestCheckpointCopier(tf.estimator.Exporter):
         self.sort_reverse = sort_reverse
         super(BestCheckpointCopier, self).__init__()
 
-    def _copyCheckpoint(self, checkpoint):
-        desination_dir = self._destinationDir(checkpoint)
+    def _copy_checkpoint(self, checkpoint):
+        desination_dir = self._destination_dir(checkpoint)
         os.makedirs(desination_dir, exist_ok=True)
 
         for file in glob.glob(r'{}*'.format(checkpoint.path)):
             self._log('copying {} to {}'.format(file, desination_dir))
             shutil.copy(file, desination_dir)
 
-    def _destinationDir(self, checkpoint):
+    def _destination_dir(self, checkpoint):
         return os.path.join(checkpoint.dir, self.name)
 
-    def _keepCheckpoint(self, checkpoint):
+    def _keep_checkpoint(self, checkpoint):
         self._log('keeping checkpoint {} with score {}'.format(checkpoint.file, checkpoint.score))
 
         self.checkpoints.append(checkpoint)
         self.checkpoints = sorted(self.checkpoints, key=self.sort_key_fn, reverse=self.sort_reverse)
 
-        self._copyCheckpoint(checkpoint)
+        self._copy_checkpoint(checkpoint)
 
     def _log(self, statement):
         tf.compat.v1.logging.info('[{}] {}'.format(self.__class__.__name__, statement))
 
-    def _pruneCheckpoints(self, checkpoint):
-        destination_dir = self._destinationDir(checkpoint)
+    def _prune_checkpoints(self, checkpoint):
+        destination_dir = self._destination_dir(checkpoint)
 
         for checkpoint in self.checkpoints[self.checkpoints_to_keep:]:
             self._log('removing old checkpoint {} with score {}'.format(checkpoint.file, checkpoint.score))
@@ -75,7 +79,7 @@ class BestCheckpointCopier(tf.estimator.Exporter):
     def _score(self, eval_result):
         return float(eval_result[self.score_metric])
 
-    def _shouldKeep(self, checkpoint):
+    def _should_keep(self, checkpoint):
         return len(self.checkpoints) < self.checkpoints_to_keep or self.compare_fn(checkpoint, self.checkpoints[-1])
 
     def export(self, estimator, export_path, checkpoint_path, eval_result, is_the_final_export):
@@ -84,8 +88,8 @@ class BestCheckpointCopier(tf.estimator.Exporter):
         score = self._score(eval_result)
         checkpoint = Checkpoint(path=checkpoint_path, score=score)
 
-        if self._shouldKeep(checkpoint):
-            self._keepCheckpoint(checkpoint)
-            self._pruneCheckpoints(checkpoint)
+        if self._should_keep(checkpoint):
+            self._keep_checkpoint(checkpoint)
+            self._prune_checkpoints(checkpoint)
         else:
             self._log('skipping checkpoint {}'.format(checkpoint.path))

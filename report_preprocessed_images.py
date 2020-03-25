@@ -7,7 +7,7 @@ import tensorflow as tf
 import numpy as np
 import matplotlib.pyplot as plt
 from data import get_input_fn
-from augmenters import img_aug, sup_aug
+from augmenters import data_aug, sup_aug
 from utils import save_plt_as_img
 
 
@@ -40,7 +40,7 @@ for idx, sample in enumerate(dataset):
         seg_mask_np = tf.cast(sample['seg_mask'], tf.uint8).numpy()[0, ...]
         seg_mask_np = np.ma.masked_where(seg_mask_np == 0, seg_mask_np)
 
-        save_plt_as_img('report_images', 'after_preprocess', img=img_np[..., 2])
+        save_plt_as_img('report_images', 'after_preprocess', mri_slice=img_np[..., 2])
 
         plt.figure(figsize=(20, 10))
         plt.subplot(1, 2, 1)
@@ -50,12 +50,12 @@ for idx, sample in enumerate(dataset):
         plt.imshow(seg_mask_np, 'jet', vmin=0, vmax=3, interpolation='none', alpha=0.5)
 
         # Save one original
-        save_plt_as_img('report_images', 'original', img=img_np[..., 2],
+        save_plt_as_img('report_images', 'original', mri_slice=img_np[..., 2],
                         seg=seg_mask_np)
 
         # Save and show 3 examples of strong augmentations of the original
-        strong_aug_imgs = img_aug(np.stack([img_np[..., 2]] * 3), strong_seed_seqs, is_seg_maps=False)
-        strong_aug_seg_masks = img_aug(np.stack([seg_mask_np] * 3), strong_seed_seqs, is_seg_maps=True)
+        strong_aug_imgs = data_aug(np.stack([img_np[..., 2]] * 3), strong_seed_seqs, is_seg_maps=False)
+        strong_aug_seg_masks = data_aug(np.stack([seg_mask_np] * 3), strong_seed_seqs, is_seg_maps=True)
         strong_aug_seg_masks = np.ma.masked_where(strong_aug_seg_masks == 0, strong_aug_seg_masks)
 
         plt.figure(figsize=(20, 10))
@@ -63,7 +63,7 @@ for idx, sample in enumerate(dataset):
         plt.imshow(img_np[..., 2], 'gray', interpolation='none')
         plt.imshow(seg_mask_np, 'jet', vmin=0, vmax=3, interpolation='none', alpha=0.5)
         for i in range(3):
-            save_plt_as_img('report_images', 'strong_aug_example_{}'.format(str(i)), img=strong_aug_imgs[i, ...],
+            save_plt_as_img('report_images', 'strong_aug_example_{}'.format(str(i)), mri_slice=strong_aug_imgs[i, ...],
                             seg=strong_aug_seg_masks[i, ...])
             plt.subplot(1, 4, i + 2)
             plt.imshow(strong_aug_imgs[i, ...], 'gray', interpolation='none')
@@ -73,7 +73,7 @@ for idx, sample in enumerate(dataset):
         weak_aug_imgs = []
         weak_aug_seg_masks = []
         for i in range(3):
-            weak_aug_img, weak_aug_seg_mask = sup_aug(img_np[..., 2], seg_mask_np, entropy=int(weak_seed_seqs[i]))
+            weak_aug_img, weak_aug_seg_mask = sup_aug(img_np[..., 2], seg_mask_np, seed=int(weak_seed_seqs[i]))
             weak_aug_imgs.append(weak_aug_img)
             weak_aug_seg_masks.append(np.ma.masked_where(weak_aug_seg_mask == 0, weak_aug_seg_mask))
 
@@ -82,7 +82,7 @@ for idx, sample in enumerate(dataset):
         plt.imshow(img_np[..., 2], 'gray', interpolation='none')
         plt.imshow(seg_mask_np, 'jet', vmin=0, vmax=3, interpolation='none', alpha=0.5)
         for i in range(3):
-            save_plt_as_img('report_images', 'weak_aug_example_{}'.format(str(i)), img=weak_aug_imgs[i],
+            save_plt_as_img('report_images', 'weak_aug_example_{}'.format(str(i)), mri_slice=weak_aug_imgs[i],
                             seg=weak_aug_seg_masks[i])
             plt.subplot(1, 4, i + 2)
             plt.imshow(weak_aug_imgs[i], 'gray', interpolation='none')

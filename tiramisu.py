@@ -1,3 +1,6 @@
+"""
+Tiramisu model.
+"""
 import tensorflow as tf
 
 
@@ -52,14 +55,15 @@ class DenseTiramisu(object):
             x = self.batch_norm(x, training, name=name + '_bn')
             x = tf.nn.relu(x, name=name + '_relu')
             x = tf.compat.v1.layers.conv2d(x,
-                                 filters=filters,
-                                 kernel_size=[3, 3],
-                                 strides=[1, 1],
-                                 padding='SAME',
-                                 dilation_rate=[1, 1],
-                                 activation=None,
-                                 kernel_initializer=tf.compat.v1.keras.initializers.VarianceScaling(scale=2.0),
-                                 name=name + '_conv3x3')
+                                           filters=filters,
+                                           kernel_size=[3, 3],
+                                           strides=[1, 1],
+                                           padding='SAME',
+                                           dilation_rate=[1, 1],
+                                           activation=None,
+                                           kernel_initializer=tf.compat.v1.keras.initializers.VarianceScaling(
+                                               scale=2.0),
+                                           name=name + '_conv3x3')
             x = tf.compat.v1.layers.dropout(x, rate=0., training=training, name=name + '_dropout')
 
         return x
@@ -103,16 +107,18 @@ class DenseTiramisu(object):
             x = self.batch_norm(x, training, name=name + '_bn')
             x = tf.nn.relu(x, name=name + 'relu')
             x = tf.compat.v1.layers.conv2d(x,
-                                 filters=filters,
-                                 kernel_size=[1, 1],
-                                 strides=[1, 1],
-                                 padding='SAME',
-                                 dilation_rate=[1, 1],
-                                 activation=None,
-                                 kernel_initializer=tf.compat.v1.keras.initializers.VarianceScaling(scale=2.0),
-                                 name=name + '_conv1x1')
+                                           filters=filters,
+                                           kernel_size=[1, 1],
+                                           strides=[1, 1],
+                                           padding='SAME',
+                                           dilation_rate=[1, 1],
+                                           activation=None,
+                                           kernel_initializer=tf.compat.v1.keras.initializers.VarianceScaling(
+                                               scale=2.0),
+                                           name=name + '_conv1x1')
             x = tf.compat.v1.layers.dropout(x, rate=0., training=training, name=name + '_dropout')
-            x = tf.nn.max_pool2d(input=x, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME', name=name + '_maxpool2x2')
+            x = tf.nn.max_pool2d(input=x, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME',
+                                 name=name + '_maxpool2x2')
 
         return x
 
@@ -128,13 +134,14 @@ class DenseTiramisu(object):
         """
         with tf.compat.v1.name_scope(name):
             x = tf.compat.v1.layers.conv2d_transpose(x,
-                                           filters=filters,
-                                           kernel_size=[3, 3],
-                                           strides=[2, 2],
-                                           padding='SAME',
-                                           activation=None,
-                                           kernel_initializer=tf.compat.v1.keras.initializers.VarianceScaling(scale=2.0),
-                                           name=name + '_trans_conv3x3')
+                                                     filters=filters,
+                                                     kernel_size=[3, 3],
+                                                     strides=[2, 2],
+                                                     padding='SAME',
+                                                     activation=None,
+                                                     kernel_initializer=tf.compat.v1.keras.initializers.VarianceScaling(
+                                                         scale=2.0),
+                                                     name=name + '_trans_conv3x3')
 
         return x
 
@@ -152,14 +159,15 @@ class DenseTiramisu(object):
         concats = []
         with tf.compat.v1.variable_scope('encoder'):
             x = tf.compat.v1.layers.conv2d(x,
-                                 filters=48,
-                                 kernel_size=[3, 3],
-                                 strides=[1, 1],
-                                 padding='SAME',
-                                 dilation_rate=[1, 1],
-                                 activation=None,
-                                 kernel_initializer=tf.compat.v1.keras.initializers.VarianceScaling(scale=2.0),
-                                 name='first_conv3x3')
+                                           filters=48,
+                                           kernel_size=[3, 3],
+                                           strides=[1, 1],
+                                           padding='SAME',
+                                           dilation_rate=[1, 1],
+                                           activation=None,
+                                           kernel_initializer=tf.compat.v1.keras.initializers.VarianceScaling(
+                                               scale=2.0),
+                                           name='first_conv3x3')
             print("First Convolution Out: ", x.get_shape())
             for block_nb in range(0, self.nb_blocks):
                 dense = self.dense_block(x, training, block_nb, 'down_dense_block_' + str(block_nb))
@@ -182,14 +190,15 @@ class DenseTiramisu(object):
 
         with tf.compat.v1.variable_scope('prediction'):
             x = tf.compat.v1.layers.conv2d(x,
-                                 filters=self.num_classes,
-                                 kernel_size=[1, 1],
-                                 strides=[1, 1],
-                                 padding='SAME',
-                                 dilation_rate=[1, 1],
-                                 activation=None,
-                                 kernel_initializer=tf.compat.v1.keras.initializers.VarianceScaling(scale=2.0),
-                                 name='last_conv1x1')
+                                           filters=self.num_classes,
+                                           kernel_size=[1, 1],
+                                           strides=[1, 1],
+                                           padding='SAME',
+                                           dilation_rate=[1, 1],
+                                           activation=None,
+                                           kernel_initializer=tf.compat.v1.keras.initializers.VarianceScaling(
+                                               scale=2.0),
+                                           name='last_conv1x1')
             print("Mask Prediction: ", x.get_shape())
 
         return x
