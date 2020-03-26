@@ -300,7 +300,7 @@ def histogram_equalization(mri: np.ndarray) -> np.ndarray:
     return mri
 
 
-def main():
+def main(_):
     """
     Main method for the preprocessing.
     """
