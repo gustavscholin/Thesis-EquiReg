@@ -318,7 +318,7 @@ def get_model_fn() -> Callable:
                 })
 
         # Supervised loss
-        sup_maps = features['seg_mask']
+        sup_maps = features['seg_map']
         sup_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(
             labels=sup_maps,
             logits=sup_logits)
