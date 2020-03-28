@@ -406,22 +406,23 @@ def get_model_fn() -> Callable:
             loss = tf.compat.v1.metrics.mean(tf.reduce_mean(input_tensor=sup_loss, axis=(-1, -2)))
 
             brats_classes = ['whole', 'core', 'enhancing']
-            dice_scores = {}
-            dice_collective = tf.zeros((predictions.shape[0]))
+            dice_scores = []
+            mean_dice_scores = {}
 
             for brats_class in brats_classes:
                 true, pred = class_convert(sup_maps, predictions, brats_class)
                 dice_score = dice_coef(true, pred)
-                dice_scores[brats_class] = tf.compat.v1.metrics.mean(dice_score)
-                dice_collective = tf.add(dice_collective, dice_score)
+                dice_scores.append(dice_score)
+                mean_dice_scores[brats_class] = tf.compat.v1.metrics.mean(dice_score)
 
+            dice_collective = tf.add_n(dice_scores)
             dice_collective = tf.compat.v1.metrics.mean(tf.divide(dice_collective, 3))
 
             eval_metrics = {
                 "eval/classify_loss": loss,
-                "eval/classify_whole_dice": dice_scores['whole'],
-                "eval/classify_core_dice": dice_scores['core'],
-                "eval/classify_enhancing_dice": dice_scores['enhancing'],
+                "eval/classify_whole_dice": mean_dice_scores['whole'],
+                "eval/classify_core_dice": mean_dice_scores['core'],
+                "eval/classify_enhancing_dice": mean_dice_scores['enhancing'],
                 "eval/classify_collective_dice": dice_collective
             }
 
