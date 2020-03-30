@@ -20,7 +20,7 @@ A trianing can then be started by running the `run_single.sh` bash script. Param
 * `unsup_ratio`: Number of unlabeled samples for each labeled sample
 * `seed`: Seed for selecting labeled and unlabeled data
 
-# Attributions
+## Attributions
 This thesis was done at the Centre for Mathematical Sciences at Lund University in collaboration with Peltarion AB (https://peltarion.com/).
 
 Code from the following repos was used and modified:
