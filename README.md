@@ -19,3 +19,11 @@ A trianing can then be started by running the `run_single.sh` bash script. Param
 * `batch_size`: Number of labeled samples in each batch
 * `unsup_ratio`: Number of unlabeled samples for each labeled sample
 * `seed`: Seed for selecting labeled and unlabeled data
+
+# Attributions
+This thesis was done at the Centre for Mathematical Sciences at Lund University in collaboration with Peltarion AB (https://peltarion.com/).
+
+Code from the following repos was used and modified:
+
+* https://github.com/google-research/uda
+* https://github.com/HasnainRaz/FC-DenseNet-TensorFlow
